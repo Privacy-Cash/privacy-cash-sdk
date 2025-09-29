@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "vitest"
+    "test": "vitest run --exclude e2e.test.ts",
+    "teste2e": "vitest run e2e.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +24,7 @@
     "bn.js": "^5.2.2",
     "borsh": "^2.0.0",
     "bs58": "^6.0.0",
-    "dotenv": "^17.2.1",
+    "dotenv": "^17.2.2",
     "ethers": "^6.15.0",
     "ffjavascript": "^0.3.1",
     "node-localstorage": "^3.0.5",
