@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, type Mock } from "vitest";
+import { PublicKey } from '@solana/web3.js';
+import BN from 'bn.js';
 
 // Define an interface for our mocked Utxo
 interface MockUtxo {
@@ -57,10 +59,11 @@ vi.mock('../models/keypair', () => {
 // Imports for testing
 // -----------------------------
 import { Keypair } from '@solana/web3.js';
-import { EncryptionService } from '../src/utils/encryption';
+import { EncryptionService, serializeProofAndExtData } from '../src/utils/encryption';
 import { Utxo } from '../src/models/utxo';
 import { Keypair as UtxoKeypair } from '../src/models/keypair';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
+import { TRANSACT_IX_DISCRIMINATOR } from '../src/utils/constants';
 
 // -----------------------------
 // Tests
@@ -631,5 +634,329 @@ describe('EncryptionService', () => {
             expect(encryptionService.getEncryptionKeyVersion(encryptedV2)).toBe('v2');
             expect(encryptedV2.subarray(0, 8).equals(EncryptionService.ENCRYPTION_VERSION_V2)).toBe(true);
         })
+    });
+});
+
+// -----------------------------
+// Tests for serializeProofAndExtData function
+// -----------------------------
+describe('serializeProofAndExtData', () => {
+    // Mock data that matches the expected structure
+    const mockProof = {
+        proofA: new Array(64).fill(1), // 64 bytes
+        proofB: new Array(128).fill(2), // 128 bytes (64*2)
+        proofC: new Array(64).fill(3), // 64 bytes
+        root: new Array(32).fill(4), // 32 bytes
+        publicAmount: new Array(32).fill(5), // 32 bytes
+        extDataHash: new Array(32).fill(6), // 32 bytes
+        inputNullifiers: [
+            new Array(32).fill(7), // 32 bytes
+            new Array(32).fill(8), // 32 bytes
+        ],
+        outputCommitments: [
+            new Array(32).fill(9), // 32 bytes
+            new Array(32).fill(10), // 32 bytes
+        ],
+    };
+
+    const mockExtData = {
+        extAmount: '1000000000', // 1 SOL in lamports
+        fee: '5000000', // 0.005 SOL in lamports
+        encryptedOutput1: Buffer.from('encrypted_output_1_data'),
+        encryptedOutput2: Buffer.from('encrypted_output_2_data'),
+        recipient: new PublicKey('11111111111111111111111111111112'),
+        feeRecipient: new PublicKey('11111111111111111111111111111112'),
+        mintAddress: new PublicKey('11111111111111111111111111111112'),
+    };
+
+    describe('basic serialization', () => {
+        it('should serialize proof and extData into a Buffer', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            expect(Buffer.isBuffer(result)).toBe(true);
+            expect(result.length).toBeGreaterThan(0);
+        });
+
+        it('should start with TRANSACT_IX_DISCRIMINATOR', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            // Check that the result starts with the discriminator
+            const discriminatorFromResult = result.subarray(0, TRANSACT_IX_DISCRIMINATOR.length);
+            expect(discriminatorFromResult.equals(TRANSACT_IX_DISCRIMINATOR)).toBe(true);
+        });
+
+        it('should have the expected total length', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            // Calculate expected length:
+            // TRANSACT_IX_DISCRIMINATOR: 8 bytes
+            // proofA: 64 bytes
+            // proofB: 128 bytes  
+            // proofC: 64 bytes
+            // root: 32 bytes
+            // publicAmount: 32 bytes
+            // extDataHash: 32 bytes
+            // inputNullifiers[0]: 32 bytes
+            // inputNullifiers[1]: 32 bytes
+            // outputCommitments[0]: 32 bytes
+            // outputCommitments[1]: 32 bytes
+            // extAmount (BN as 8 bytes): 8 bytes
+            // fee (BN as 8 bytes): 8 bytes
+            // encryptedOutput1 length (4 bytes) + data: 4 + 23 = 27 bytes
+            // encryptedOutput2 length (4 bytes) + data: 4 + 23 = 27 bytes
+            const expectedLength = 8 + 64 + 128 + 64 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 27 + 27;
+            expect(result.length).toBe(expectedLength);
+        });
+    });
+
+    describe('proof data serialization', () => {
+        it('should correctly serialize proof components in order', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            let offset = TRANSACT_IX_DISCRIMINATOR.length;
+            
+            // Check proofA
+            const proofAFromResult = result.subarray(offset, offset + 64);
+            expect(proofAFromResult.equals(Buffer.from(mockProof.proofA))).toBe(true);
+            offset += 64;
+            
+            // Check proofB
+            const proofBFromResult = result.subarray(offset, offset + 128);
+            expect(proofBFromResult.equals(Buffer.from(mockProof.proofB))).toBe(true);
+            offset += 128;
+            
+            // Check proofC
+            const proofCFromResult = result.subarray(offset, offset + 64);
+            expect(proofCFromResult.equals(Buffer.from(mockProof.proofC))).toBe(true);
+        });
+
+        it('should correctly serialize public signals', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            let offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64; // Skip discriminator and proof components
+            
+            // Check root
+            const rootFromResult = result.subarray(offset, offset + 32);
+            expect(rootFromResult.equals(Buffer.from(mockProof.root))).toBe(true);
+            offset += 32;
+            
+            // Check publicAmount
+            const publicAmountFromResult = result.subarray(offset, offset + 32);
+            expect(publicAmountFromResult.equals(Buffer.from(mockProof.publicAmount))).toBe(true);
+            offset += 32;
+            
+            // Check extDataHash
+            const extDataHashFromResult = result.subarray(offset, offset + 32);
+            expect(extDataHashFromResult.equals(Buffer.from(mockProof.extDataHash))).toBe(true);
+        });
+
+        it('should correctly serialize nullifiers and commitments', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            let offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64 + 32 + 32 + 32; // Skip to nullifiers
+            
+            // Check inputNullifiers
+            const nullifier0FromResult = result.subarray(offset, offset + 32);
+            expect(nullifier0FromResult.equals(Buffer.from(mockProof.inputNullifiers[0]))).toBe(true);
+            offset += 32;
+            
+            const nullifier1FromResult = result.subarray(offset, offset + 32);
+            expect(nullifier1FromResult.equals(Buffer.from(mockProof.inputNullifiers[1]))).toBe(true);
+            offset += 32;
+            
+            // Check outputCommitments
+            const commitment0FromResult = result.subarray(offset, offset + 32);
+            expect(commitment0FromResult.equals(Buffer.from(mockProof.outputCommitments[0]))).toBe(true);
+            offset += 32;
+            
+            const commitment1FromResult = result.subarray(offset, offset + 32);
+            expect(commitment1FromResult.equals(Buffer.from(mockProof.outputCommitments[1]))).toBe(true);
+        });
+    });
+
+    describe('extData serialization', () => {
+        it('should correctly serialize extAmount as signed 64-bit little-endian', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            // Calculate offset to extAmount (after discriminator + all proof data)
+            const offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64 + 32 + 32 + 32 + 32 + 32 + 32 + 32;
+            
+            const extAmountFromResult = result.subarray(offset, offset + 8);
+            const expectedExtAmount = Buffer.from(new BN(mockExtData.extAmount).toTwos(64).toArray('le', 8));
+            
+            expect(extAmountFromResult.equals(expectedExtAmount)).toBe(true);
+        });
+
+        it('should correctly serialize fee as unsigned 64-bit little-endian', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            // Calculate offset to fee (after discriminator + all proof data + extAmount)
+            const offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8;
+            
+            const feeFromResult = result.subarray(offset, offset + 8);
+            const expectedFee = Buffer.from(new BN(mockExtData.fee).toArray('le', 8));
+            
+            expect(feeFromResult.equals(expectedFee)).toBe(true);
+        });
+
+        it('should correctly serialize encrypted outputs with length prefixes', () => {
+            const result = serializeProofAndExtData(mockProof, mockExtData);
+            
+            // Calculate offset to encrypted outputs (after all previous data)
+            let offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8;
+            
+            // Check encryptedOutput1 length prefix
+            const output1LengthFromResult = result.subarray(offset, offset + 4);
+            const expectedOutput1Length = Buffer.from(new BN(mockExtData.encryptedOutput1.length).toArray('le', 4));
+            expect(output1LengthFromResult.equals(expectedOutput1Length)).toBe(true);
+            offset += 4;
+            
+            // Check encryptedOutput1 data
+            const output1DataFromResult = result.subarray(offset, offset + mockExtData.encryptedOutput1.length);
+            expect(output1DataFromResult.equals(mockExtData.encryptedOutput1)).toBe(true);
+            offset += mockExtData.encryptedOutput1.length;
+            
+            // Check encryptedOutput2 length prefix
+            const output2LengthFromResult = result.subarray(offset, offset + 4);
+            const expectedOutput2Length = Buffer.from(new BN(mockExtData.encryptedOutput2.length).toArray('le', 4));
+            expect(output2LengthFromResult.equals(expectedOutput2Length)).toBe(true);
+            offset += 4;
+            
+            // Check encryptedOutput2 data
+            const output2DataFromResult = result.subarray(offset, offset + mockExtData.encryptedOutput2.length);
+            expect(output2DataFromResult.equals(mockExtData.encryptedOutput2)).toBe(true);
+        });
+    });
+
+    describe('edge cases and error handling', () => {
+        it('should handle zero amounts correctly', () => {
+            const zeroExtData = {
+                ...mockExtData,
+                extAmount: '0',
+                fee: '0'
+            };
+            
+            const result = serializeProofAndExtData(mockProof, zeroExtData);
+            expect(Buffer.isBuffer(result)).toBe(true);
+            
+            // Verify zero amounts are serialized correctly
+            const offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64 + 32 + 32 + 32 + 32 + 32 + 32 + 32;
+            const extAmountFromResult = result.subarray(offset, offset + 8);
+            const expectedZeroAmount = Buffer.from(new BN(0).toTwos(64).toArray('le', 8));
+            expect(extAmountFromResult.equals(expectedZeroAmount)).toBe(true);
+        });
+
+        it('should handle negative extAmount correctly', () => {
+            const negativeExtData = {
+                ...mockExtData,
+                extAmount: '-1000000000' // negative 1 SOL
+            };
+            
+            const result = serializeProofAndExtData(mockProof, negativeExtData);
+            expect(Buffer.isBuffer(result)).toBe(true);
+            
+            // Verify negative amount is serialized correctly using two's complement
+            const offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64 + 32 + 32 + 32 + 32 + 32 + 32 + 32;
+            const extAmountFromResult = result.subarray(offset, offset + 8);
+            const expectedNegativeAmount = Buffer.from(new BN('-1000000000').toTwos(64).toArray('le', 8));
+            expect(extAmountFromResult.equals(expectedNegativeAmount)).toBe(true);
+        });
+
+        it('should handle empty encrypted outputs', () => {
+            const emptyOutputsExtData = {
+                ...mockExtData,
+                encryptedOutput1: Buffer.alloc(0),
+                encryptedOutput2: Buffer.alloc(0)
+            };
+            
+            const result = serializeProofAndExtData(mockProof, emptyOutputsExtData);
+            expect(Buffer.isBuffer(result)).toBe(true);
+            
+            // Should still include length prefixes (which would be 0)
+            let offset = TRANSACT_IX_DISCRIMINATOR.length + 64 + 128 + 64 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8;
+            
+            const output1LengthFromResult = result.subarray(offset, offset + 4);
+            const expectedZeroLength = Buffer.from(new BN(0).toArray('le', 4));
+            expect(output1LengthFromResult.equals(expectedZeroLength)).toBe(true);
+        });
+
+        it('should handle large numbers correctly', () => {
+            const largeExtData = {
+                ...mockExtData,
+                extAmount: '9223372036854775807', // Max signed 64-bit integer
+                fee: '18446744073709551615' // Max unsigned 64-bit integer (will be truncated)
+            };
+            
+            expect(() => {
+                serializeProofAndExtData(mockProof, largeExtData);
+            }).not.toThrow();
+        });
+    });
+
+    describe('deterministic output', () => {
+        it('should produce identical output for identical inputs', () => {
+            const result1 = serializeProofAndExtData(mockProof, mockExtData);
+            const result2 = serializeProofAndExtData(mockProof, mockExtData);
+            
+            expect(result1.equals(result2)).toBe(true);
+        });
+
+        it('should produce different output for different inputs', () => {
+            const modifiedExtData = {
+                ...mockExtData,
+                extAmount: '2000000000' // Different amount
+            };
+            
+            const result1 = serializeProofAndExtData(mockProof, mockExtData);
+            const result2 = serializeProofAndExtData(mockProof, modifiedExtData);
+            
+            expect(result1.equals(result2)).toBe(false);
+        });
+    });
+
+    describe('integration compatibility', () => {
+        it('should work with real-world proof structure from parseProofToBytesArray', () => {
+            // Mock a proof structure that would come from parseProofToBytesArray
+            const realWorldProof = {
+                proofA: Array.from({ length: 64 }, (_, i) => i % 256),
+                proofB: Array.from({ length: 128 }, (_, i) => (i * 2) % 256),
+                proofC: Array.from({ length: 64 }, (_, i) => (i * 3) % 256),
+                root: Array.from({ length: 32 }, (_, i) => (i * 4) % 256),
+                publicAmount: Array.from({ length: 32 }, (_, i) => (i * 5) % 256),
+                extDataHash: Array.from({ length: 32 }, (_, i) => (i * 6) % 256),
+                inputNullifiers: [
+                    Array.from({ length: 32 }, (_, i) => (i * 7) % 256),
+                    Array.from({ length: 32 }, (_, i) => (i * 8) % 256),
+                ],
+                outputCommitments: [
+                    Array.from({ length: 32 }, (_, i) => (i * 9) % 256),
+                    Array.from({ length: 32 }, (_, i) => (i * 10) % 256),
+                ],
+            };
+
+            expect(() => {
+                serializeProofAndExtData(realWorldProof, mockExtData);
+            }).not.toThrow();
+        });
+
+        it('should handle string and BN inputs for amounts', () => {
+            const stringExtData = {
+                ...mockExtData,
+                extAmount: '1000000000',
+                fee: '5000000'
+            };
+
+            const bnExtData = {
+                ...mockExtData,
+                extAmount: new BN('1000000000'),
+                fee: new BN('5000000')
+            };
+
+            const result1 = serializeProofAndExtData(mockProof, stringExtData);
+            const result2 = serializeProofAndExtData(mockProof, bnExtData);
+
+            // Should produce identical results regardless of input type
+            expect(result1.equals(result2)).toBe(true);
+        });
     });
 });
