@@ -4,7 +4,7 @@
 ```
     npm test
 ```
-2. To run e2e test (on Mainnet), you need to put your private key at .env file under the project root directory, and then run:
+2. To run e2e test (on Mainnet), you need to put your private key (PRIVATE_KEY) at .env file under the project root directory, and then run:
 ```
     npm run teste2e
 ```
