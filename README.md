@@ -1,5 +1,4 @@
-##Privacy Cash SDK
-
+## Privacy Cash SDK
 ### Tests
 1. To run unit tests:
 ```
