@@ -1,7 +1,7 @@
 # This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
 # For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
 
-name: Node.js Package
+name: Publish to npm
 
 on:
   push:
@@ -9,26 +9,42 @@ on:
       - main
 
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm test
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-  publish-npm:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org/
-      - run: npm ci
-      - run: npm publish
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: "npm"
+
+      - name: Get previous package.json version
+        run: |
+          git fetch origin main~1
+          PREV=$(git show origin/main~1:package.json | jq -r .version)
+          echo "PREV_VERSION=$PREV" >> $GITHUB_ENV
+
+      - name: Get current package.json version
+        run: |
+          CURR=$(jq -r .version package.json)
+          echo "CURR_VERSION=$CURR" >> $GITHUB_ENV
+
+      - name: Compare versions
+        run: |
+          if [ "$PREV_VERSION" = "$CURR_VERSION" ]; then
+            echo "Version unchanged, skip publish"
+            echo "SHOULD_PUBLISH=false" >> $GITHUB_ENV
+          else
+            echo "Version changed, will publish"
+            echo "SHOULD_PUBLISH=true" >> $GITHUB_ENV
+          fi
+
+      - name: Publish to npm
+        if: env.SHOULD_PUBLISH == 'true'
+        run: npm publish
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
