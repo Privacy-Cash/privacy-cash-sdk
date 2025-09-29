@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run --exclude e2e.test.ts",
+    "test": "vitest run --exclude \"**/__tests__/e2e.test.ts\"",
     "teste2e": "vitest run e2e.test.ts"
   },
   "keywords": [],
