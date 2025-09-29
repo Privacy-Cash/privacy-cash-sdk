@@ -24,7 +24,7 @@ jobs:
 
       - name: Get previous package.json version
         run: |
-          git fetch origin main~1
+          git fetch origin main
           PREV=$(git show origin/main~1:package.json | jq -r .version)
           echo "PREV_VERSION=$PREV" >> $GITHUB_ENV
 
