@@ -1,6 +1,6 @@
 {
-  "name": "pc930",
-  "version": "0.1.25",
+  "name": "privacycash",
+  "version": "0.1.13",
   "description": "",
   "main": "dist/index.js",
   "exports": {

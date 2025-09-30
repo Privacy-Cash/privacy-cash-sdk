@@ -192,7 +192,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
             let cachedEncryptedOutputs = JSON.parse(cachedString)
             for (let encryptedOutput of cachedEncryptedOutputs) {
                 if (decryptionTaskFinished % 100 == 0) {
-                    logger.info(`(decrypting utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
+                    logger.info(`(decrypting cached utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
                 }
                 let dres = await decrypt_output(encryptedOutput, encryptionService, utxoKeypair, lightWasm, connection)
                 decryptionTaskFinished++
