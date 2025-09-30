@@ -1,15 +1,15 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
-import { Keypair as UtxoKeypair } from './models/keypair.ts';
-import { Utxo } from './models/utxo.ts';
-import { EncryptionService } from './utils/encryption.ts';
+import { Keypair as UtxoKeypair } from './models/keypair.js';
+import { Utxo } from './models/utxo.js';
+import { EncryptionService } from './utils/encryption.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
 //@ts-ignore
 import * as ffjavascript from 'ffjavascript';
-import { FETCH_UTXOS_GROUP_SIZE, INDEXER_API_URL, LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.ts';
-import { overwriteLog } from './utils/utils.ts';
-import { logger } from './utils/logger.ts';
-import { getStorageInstance } from './utils/storage.ts';
+import { FETCH_UTXOS_GROUP_SIZE, INDEXER_API_URL, LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
+import { overwriteLog } from './utils/utils.js';
+import { logger } from './utils/logger.js';
+import { getStorageInstance } from './utils/storage.js';
 
 // Use type assertion for the utility functions (same pattern as in get_verification_keys.ts)
 const utils = ffjavascript.utils as any;

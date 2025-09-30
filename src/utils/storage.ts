@@ -6,7 +6,7 @@ export async function getStorageInstance(): Promise<Storage> {
     } else {
         // for Node
         if (!localStorage) {
-            const { LocalStorage, path } = await import("./node-shim.ts");
+            const { LocalStorage, path } = await import("./node-shim.js");
             localStorage = new LocalStorage(path.join(process.cwd(), "cache"));
             return localStorage
         }

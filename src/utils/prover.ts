@@ -11,12 +11,7 @@
 
 import * as anchor from "@coral-xyz/anchor";
 import { wtns, groth16 } from 'snarkjs'
-import * as fs from 'fs'
-import * as tmp from 'tmp-promise'
-import { promisify } from 'util'
-import { exec as execCallback } from 'child_process'
-import { FIELD_SIZE } from './constants.ts'
-import * as path from 'path'
+import { FIELD_SIZE } from './constants.js'
 
 // @ts-ignore - ignore TypeScript errors for ffjavascript
 import { utils } from 'ffjavascript'
@@ -42,7 +37,6 @@ const wtnsTyped = wtns as unknown as WtnsModule
 const groth16Typed = groth16 as unknown as Groth16Module
 const utilsTyped = utils as unknown as UtilsModule
 
-const exec = promisify(execCallback)
 
 // Define interfaces for the proof structures
 interface Proof {
@@ -74,58 +68,6 @@ async function prove(input: any, keyBasePath: string): Promise<{
     `${keyBasePath}.wasm`,
     `${keyBasePath}.zkey`,
   )
-}
-
-async function verify(verificationKeyPath: string, publicSignals: any, proof: any): Promise<boolean> {
-  // Load verification key from the specified path
-  const vKey = JSON.parse(fs.readFileSync(`${verificationKeyPath}`, 'utf8'));
-  const res = await groth16Typed.verify(vKey, publicSignals, proof);
-  return res;
-}
-
-/**
- * Generates a ZK proof using zkutil
- * 
- * This is an alternative proving method using the zkutil command line tool.
- * It creates temporary files for the witness and proof during the process.
- * 
- * @param input The circuit inputs to generate a proof for
- * @param keyBasePath The base path for the circuit keys
- * @returns A promise that resolves to a hex string of the proof
- */
-function proveZkutil(input: any, keyBasePath: string): Promise<string> {
-  input = utilsTyped.stringifyBigInts(input)
-  // console.log('input', input)
-  return tmp.dir().then(async (dir: { path: string }) => {
-    const dirPath = dir.path
-    let out: any
-
-    try {
-      // Generate witness
-      await wtnsTyped.debug(
-        utilsTyped.unstringifyBigInts(input),
-        `${keyBasePath}.wasm`,
-        `${dirPath}/witness.wtns`,
-        `${keyBasePath}.sym`,
-        {},
-        console,
-      )
-      const witness = utilsTyped.stringifyBigInts(await wtnsTyped.exportJson(`${dirPath}/witness.wtns`))
-      fs.writeFileSync(`${dirPath}/witness.json`, JSON.stringify(witness, null, 2))
-
-      // Run zkutil prove command
-      out = await exec(
-        `zkutil prove -c ${keyBasePath}.r1cs -p ${keyBasePath}.params -w ${dirPath}/witness.json -r ${dirPath}/proof.json -o ${dirPath}/public.json`,
-      )
-      // Verify the generated proof
-      await exec(`zkutil verify -p ${keyBasePath}.params -r ${dirPath}/proof.json -i ${dirPath}/public.json`)
-    } catch (e) {
-      console.log(out, e)
-      throw e
-    }
-    // Return the proof as a hex string
-    return '0x' + JSON.parse(fs.readFileSync(`${dirPath}/proof.json`).toString()).proof
-  })
 }
 
 export function parseProofToBytesArray(
@@ -244,4 +186,4 @@ function addBitmaskToByte(byte: number, yIsPositive: boolean): number {
   }
 }
 
-export { prove, proveZkutil, verify, type Proof }
+export { prove, type Proof }

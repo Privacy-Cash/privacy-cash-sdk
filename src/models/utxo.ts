@@ -6,7 +6,7 @@
  */
 
 import BN from 'bn.js';
-import { Keypair } from './keypair.ts';
+import { Keypair } from './keypair.js';
 import * as hasher from '@lightprotocol/hasher.rs';
 import { ethers } from 'ethers';
 /**
