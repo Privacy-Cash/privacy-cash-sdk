@@ -53,12 +53,13 @@ type DepositParams = {
     publicKey: PublicKey,
     connection: Connection,
     amount_in_lamports: number,
+    storage: Storage,
     encryptionService?: EncryptionService,
     keyBasePath: string,
     lightWasm: hasher.LightWasm,
     transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
-export async function deposit({ lightWasm, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner }: DepositParams) {
+export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner }: DepositParams) {
     if (!encryptionService) {
         encryptionService = new EncryptionService();
     }
@@ -98,7 +99,7 @@ export async function deposit({ lightWasm, keyBasePath, publicKey, connection, a
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const allUtxos = await getUtxos({ connection, publicKey, encryptionService });
+    const allUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
     logger.debug(`Found ${allUtxos.length} total UTXOs`);
 
     // Filter out zero-amount UTXOs (dummy UTXOs that can't be spent)

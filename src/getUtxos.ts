@@ -9,7 +9,6 @@ import * as ffjavascript from 'ffjavascript';
 import { FETCH_UTXOS_GROUP_SIZE, INDEXER_API_URL, LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
 import { overwriteLog } from './utils/utils.js';
 import { logger } from './utils/logger.js';
-import { getStorageInstance } from './utils/storage.js';
 
 // Use type assertion for the utility functions (same pattern as in get_verification_keys.ts)
 const utils = ffjavascript.utils as any;
@@ -54,16 +53,16 @@ let decryptionTaskFinished = 0;
  * @returns Array of decrypted UTXOs that belong to the user
  */
 
-export async function getUtxos({ publicKey, connection, encryptionService }: {
+export async function getUtxos({ publicKey, connection, encryptionService, storage }: {
     publicKey: PublicKey,
     connection: Connection,
-    encryptionService: EncryptionService
+    encryptionService: EncryptionService,
+    storage: Storage
 }): Promise<Utxo[]> {
     if (!getMyUtxosPromise) {
         getMyUtxosPromise = (async () => {
             let valid_utxos: Utxo[] = []
             let valid_strings: string[] = []
-            let storage = await getStorageInstance()
             try {
                 let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey))
                 if (offsetStr) {
@@ -77,7 +76,7 @@ export async function getUtxos({ publicKey, connection, encryptionService }: {
                     let fetch_utxo_offset = offsetStr ? Number(offsetStr) : 0
                     let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
                     let fetch_utxo_url = `${INDEXER_API_URL}/utxos/range?start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
-                    let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService })
+                    let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService, storage })
                     let am = 0
 
                     const nonZeroUtxos: Utxo[] = [];
@@ -118,11 +117,12 @@ export async function getUtxos({ publicKey, connection, encryptionService }: {
     return getMyUtxosPromise
 }
 
-async function fetchUserUtxos({ publicKey, connection, url, encryptionService }: {
+async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionService }: {
     publicKey: PublicKey,
     connection: Connection,
     url: string,
-    encryptionService: EncryptionService
+    encryptionService: EncryptionService,
+    storage: Storage
 }): Promise<{
     encryptedOutputs: string[],
     utxos: Utxo[],
@@ -167,7 +167,6 @@ async function fetchUserUtxos({ publicKey, connection, url, encryptionService }:
     let successfulDecryptions = 0;
 
     let cachedStringNum = 0
-    let storage = await getStorageInstance()
     let cachedString = storage.getItem(LSK_ENCRPTED_OUTPUTS + localstorageKey(publicKey))
     if (cachedString) {
         cachedStringNum = JSON.parse(cachedString).length
