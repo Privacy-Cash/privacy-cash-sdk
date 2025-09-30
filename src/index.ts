@@ -118,8 +118,6 @@ export class PrivacyCash {
     }
 }
 
-export { deposit, withdraw }
-
 function getSolanaKeypair(
     secret: string | number[] | Uint8Array | Keypair
 ): Keypair | null {

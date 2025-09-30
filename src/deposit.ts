@@ -54,15 +54,12 @@ type DepositParams = {
     connection: Connection,
     amount_in_lamports: number,
     storage: Storage,
-    encryptionService?: EncryptionService,
+    encryptionService: EncryptionService,
     keyBasePath: string,
     lightWasm: hasher.LightWasm,
     transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
 export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner }: DepositParams) {
-    if (!encryptionService) {
-        encryptionService = new EncryptionService();
-    }
     // const amount_in_lamports = amount_in_sol * LAMPORTS_PER_SOL
     const fee_amount_in_lamports = 0
     logger.debug('Encryption key generated from user keypair');

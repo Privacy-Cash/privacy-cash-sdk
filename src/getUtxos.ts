@@ -7,7 +7,6 @@ import { WasmFactory } from '@lightprotocol/hasher.rs';
 //@ts-ignore
 import * as ffjavascript from 'ffjavascript';
 import { FETCH_UTXOS_GROUP_SIZE, INDEXER_API_URL, LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
-import { overwriteLog } from './utils/utils.js';
 import { logger } from './utils/logger.js';
 
 // Use type assertion for the utility functions (same pattern as in get_verification_keys.ts)
@@ -104,7 +103,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
                     await sleep(100)
                 }
             } catch (e: any) {
-                logger.debug('f err:', e.message)
+                throw e
             } finally {
                 getMyUtxosPromise = null
             }
@@ -177,7 +176,9 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
     // check fetched string
     for (let i = 0; i < encryptedOutputs.length; i++) {
         const encryptedOutput = encryptedOutputs[i];
-        overwriteLog(`(decrypting utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
+        if (decryptionTaskFinished % 100 == 0) {
+            logger.info(`(decrypting utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
+        }
         let dres = await decrypt_output(encryptedOutput, encryptionService, utxoKeypair, lightWasm, connection)
         decryptionTaskFinished++
         if (dres.status == 'decrypted' && dres.utxo) {
@@ -190,7 +191,9 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
         if (cachedString) {
             let cachedEncryptedOutputs = JSON.parse(cachedString)
             for (let encryptedOutput of cachedEncryptedOutputs) {
-                overwriteLog(`(decrypting utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
+                if (decryptionTaskFinished % 100 == 0) {
+                    logger.info(`(decrypting utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
+                }
                 let dres = await decrypt_output(encryptedOutput, encryptionService, utxoKeypair, lightWasm, connection)
                 decryptionTaskFinished++
                 if (dres.status == 'decrypted' && dres.utxo) {

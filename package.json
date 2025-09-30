@@ -1,13 +1,14 @@
 {
   "name": "pc930",
-  "version": "0.1.17",
+  "version": "0.1.23",
   "description": "",
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
     "./getUtxos": "./dist/getUtxos.js",
     "./deposit": "./dist/deposit.js",
-    "./withdraw": "./dist/withdraw.js"
+    "./withdraw": "./dist/withdraw.js",
+    "./encryption": "./dist/utils/encryption.js"
   },
   "types": "dist/index.d.ts",
   "type": "module",

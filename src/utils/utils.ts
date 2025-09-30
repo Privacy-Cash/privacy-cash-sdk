@@ -112,11 +112,6 @@ export function getExtDataHash(extData: {
   return Buffer.from(hashHex.slice(2), 'hex');
 }
 
-export function overwriteLog(s: string) {
-  process.stdout.write(`\r${s} `);
-}
-
-
 
 // Function to fetch Merkle proof from API for a given commitment
 export async function fetchMerkleProof(commitment: string): Promise<{ pathElements: string[], pathIndices: number[] }> {
