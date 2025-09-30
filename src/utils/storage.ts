@@ -1,4 +1,3 @@
-let localStorage: Storage | undefined = undefined;
 export async function getStorageInstance(): Promise<Storage> {
     if (typeof window !== "undefined" && window.localStorage) {
         // for web browser
