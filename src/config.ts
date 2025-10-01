@@ -13,7 +13,7 @@ export async function getConfig<K extends keyof Config>(key: K): Promise<Config[
         const res = await fetch(INDEXER_API_URL + '/config')
         const data = await res.json()
 
-        // 类型检查
+        // check types
         if (
             typeof data.withdraw_fee_rate !== 'number' ||
             typeof data.withdraw_rent_fee !== 'number' ||
