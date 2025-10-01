@@ -81,22 +81,8 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const allUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
-    logger.debug(`Found ${allUtxos.length} total UTXOs`);
-
-    // Filter out zero-amount UTXOs (dummy UTXOs that can't be spent)
-    const nonZeroUtxos = allUtxos.filter(utxo => utxo.amount.gt(new BN(0)));
-    logger.debug(`Found ${nonZeroUtxos.length} non-zero UTXOs`);
-
-    // Check which non-zero UTXOs are unspent
-    logger.debug('Checking which UTXOs are unspent...');
-    const utxoSpentStatuses = await Promise.all(
-        nonZeroUtxos.map(utxo => isUtxoSpent(connection, utxo))
-    );
-
-    // Filter to only include unspent UTXOs
-    const unspentUtxos = nonZeroUtxos.filter((utxo, index) => !utxoSpentStatuses[index]);
-    logger.debug(`Found ${unspentUtxos.length} unspent UTXOs available for spending`);
+    const unspentUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
+    logger.debug(`Found ${unspentUtxos.length} total UTXOs`);
 
     // Calculate and log total unspent UTXO balance
     const totalUnspentBalance = unspentUtxos.reduce((sum, utxo) => sum.add(utxo.amount), new BN(0));
