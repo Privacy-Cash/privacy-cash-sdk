@@ -1,15 +1,15 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Buffer } from 'buffer';
-import { Keypair as UtxoKeypair } from './models/keypair.ts';
+import { Keypair as UtxoKeypair } from './models/keypair.js';
 import * as hasher from '@lightprotocol/hasher.rs';
-import { Utxo } from './models/utxo.ts';
-import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.ts';
-import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, INDEXER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID, WITHDRAW_FEE_RATE, WITHDRAW_RENT_FEE } from './utils/constants.ts';
-import { EncryptionService, findCrossCheckNullifierPDAs, serializeProofAndExtData } from './utils/encryption.ts';
-import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.ts';
-import { getUtxos, isUtxoSpent } from './getUtxos.ts';
-import { logger } from './utils/logger.ts';
+import { Utxo } from './models/utxo.js';
+import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
+import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, INDEXER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID, WITHDRAW_FEE_RATE, WITHDRAW_RENT_FEE } from './utils/constants.js';
+import { EncryptionService, findCrossCheckNullifierPDAs, serializeProofAndExtData } from './utils/encryption.js';
+import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
+import { getUtxos, isUtxoSpent } from './getUtxos.js';
+import { logger } from './utils/logger.js';
 // Indexer API endpoint
 
 
@@ -48,10 +48,11 @@ type WithdrawParams = {
     keyBasePath: string,
     encryptionService: EncryptionService,
     lightWasm: hasher.LightWasm,
-    recipient: PublicKey
+    recipient: PublicKey,
+    storage: Storage
 }
 
-export async function withdraw({ recipient, lightWasm, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath }: WithdrawParams) {
+export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath }: WithdrawParams) {
     let fee_in_lamports = amount_in_lamports * WITHDRAW_FEE_RATE + LAMPORTS_PER_SOL * WITHDRAW_RENT_FEE
     amount_in_lamports -= fee_in_lamports
     let isPartial = false
@@ -80,7 +81,7 @@ export async function withdraw({ recipient, lightWasm, publicKey, connection, am
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const allUtxos = await getUtxos({ connection, publicKey, encryptionService });
+    const allUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
     logger.debug(`Found ${allUtxos.length} total UTXOs`);
 
     // Filter out zero-amount UTXOs (dummy UTXOs that can't be spent)

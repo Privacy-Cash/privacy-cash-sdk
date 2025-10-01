@@ -14,7 +14,7 @@ export function setLogger(logger: LoggerFn) {
     userLogger = logger;
 }
 
-function argToStr(...args: unknown[]) {
+function argToStr(args: unknown[]) {
     return args.map(arg => {
         if (typeof arg === "object" && arg !== null) {
             try {

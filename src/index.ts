@@ -1,14 +1,17 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from '@solana/web3.js';
-import { deposit } from './deposit.ts';
-import { getBalanceFromUtxos, getUtxos, localstorageKey } from './getUtxos.ts';
+import { deposit } from './deposit.js';
+import { getBalanceFromUtxos, getUtxos, localstorageKey } from './getUtxos.js';
 
-import { LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET } from './utils/constants.ts';
-import { logger, type LoggerFn, setLogger } from './utils/logger.ts';
-import { EncryptionService } from './utils/encryption.ts';
+import { LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET } from './utils/constants.js';
+import { logger, type LoggerFn, setLogger } from './utils/logger.js';
+import { EncryptionService } from './utils/encryption.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
-import { getStorageInstance } from './utils/storage.ts';
 import bs58 from 'bs58'
-import { withdraw } from './withdraw.ts';
+import { withdraw } from './withdraw.js';
+import { LocalStorage } from "node-localstorage";
+import path from 'node:path'
+
+let storage = new LocalStorage(path.join(process.cwd(), "cache"));
 
 export class PrivacyCash {
     private connection: Connection
@@ -47,7 +50,6 @@ export class PrivacyCash {
         if (!this.publicKey) {
             return this
         }
-        let storage = await getStorageInstance()
         storage.removeItem(LSK_FETCH_OFFSET + localstorageKey(this.publicKey))
         storage.removeItem(LSK_ENCRPTED_OUTPUTS + localstorageKey(this.publicKey))
         return this
@@ -72,7 +74,8 @@ export class PrivacyCash {
                 tx.sign([this.keypair])
                 return tx
             },
-            keyBasePath: await getKeyBasePath()
+            keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
+            storage
         })
     }
 
@@ -93,7 +96,8 @@ export class PrivacyCash {
             encryptionService: this.encryptionService,
             publicKey: this.publicKey,
             recipient: recipientAddress ? new PublicKey(recipientAddress) : this.publicKey,
-            keyBasePath: await getKeyBasePath()
+            keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
+            storage
         })
     }
 
@@ -101,7 +105,7 @@ export class PrivacyCash {
      * Returns the amount of lamports current wallet has in Privacy Cash.
      */
     async getPrivateBalance() {
-        let utxos = await getUtxos({ publicKey: this.publicKey, connection: this.connection, encryptionService: this.encryptionService })
+        let utxos = await getUtxos({ publicKey: this.publicKey, connection: this.connection, encryptionService: this.encryptionService, storage })
         console.log('got utxos', utxos.length)
         return getBalanceFromUtxos(utxos)
     }
@@ -112,11 +116,6 @@ export class PrivacyCash {
     isBrowser() {
         return typeof window !== "undefined"
     }
-}
-
-async function getKeyBasePath() {
-    const { path } = await import("./utils/node-shim.ts");
-    return path.join(import.meta.dirname, '..', 'circuit2', 'transaction2')
 }
 
 function getSolanaKeypair(

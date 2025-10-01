@@ -1,16 +1,16 @@
 import { Connection, Keypair, PublicKey, TransactionInstruction, SystemProgram, ComputeBudgetProgram, VersionedTransaction, TransactionMessage, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import BN from 'bn.js';
-import { Utxo } from './models/utxo.ts';
-import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.ts';
-import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.ts';
+import { Utxo } from './models/utxo.js';
+import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
+import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.js';
 import * as hasher from '@lightprotocol/hasher.rs';
-import { MerkleTree } from './utils/merkle_tree.ts';
-import { EncryptionService, findCrossCheckNullifierPDAs, serializeProofAndExtData } from './utils/encryption.ts';
-import { Keypair as UtxoKeypair } from './models/keypair.ts';
-import { getUtxos, isUtxoSpent } from './getUtxos.ts';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, INDEXER_API_URL, PROGRAM_ID } from './utils/constants.ts';
-import { useExistingALT } from './utils/address_lookup_table.ts';
-import { logger } from './utils/logger.ts';
+import { MerkleTree } from './utils/merkle_tree.js';
+import { EncryptionService, findCrossCheckNullifierPDAs, serializeProofAndExtData } from './utils/encryption.js';
+import { Keypair as UtxoKeypair } from './models/keypair.js';
+import { getUtxos, isUtxoSpent } from './getUtxos.js';
+import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, INDEXER_API_URL, PROGRAM_ID } from './utils/constants.js';
+import { useExistingALT } from './utils/address_lookup_table.js';
+import { logger } from './utils/logger.js';
 
 
 // Function to relay pre-signed deposit transaction to indexer backend
@@ -53,12 +53,13 @@ type DepositParams = {
     publicKey: PublicKey,
     connection: Connection,
     amount_in_lamports: number,
+    storage: Storage,
     encryptionService: EncryptionService,
     keyBasePath: string,
     lightWasm: hasher.LightWasm,
     transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
-export async function deposit({ lightWasm, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner }: DepositParams) {
+export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner }: DepositParams) {
     // const amount_in_lamports = amount_in_sol * LAMPORTS_PER_SOL
     const fee_amount_in_lamports = 0
     logger.debug('Encryption key generated from user keypair');
@@ -95,7 +96,7 @@ export async function deposit({ lightWasm, keyBasePath, publicKey, connection, a
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const allUtxos = await getUtxos({ connection, publicKey, encryptionService });
+    const allUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
     logger.debug(`Found ${allUtxos.length} total UTXOs`);
 
     // Filter out zero-amount UTXOs (dummy UTXOs that can't be spent)

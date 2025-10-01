@@ -1,11 +1,11 @@
 import { Keypair, PublicKey } from '@solana/web3.js';
 import nacl from 'tweetnacl';
 import * as crypto from 'crypto';
-import { Utxo } from '../models/utxo.ts';
+import { Utxo } from '../models/utxo.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
-import { Keypair as UtxoKeypair } from '../models/keypair.ts';
+import { Keypair as UtxoKeypair } from '../models/keypair.js';
 import { keccak256 } from '@ethersproject/keccak256';
-import { PROGRAM_ID, TRANSACT_IX_DISCRIMINATOR } from './constants.ts';
+import { PROGRAM_ID, TRANSACT_IX_DISCRIMINATOR } from './constants.js';
 import BN from 'bn.js';
 
 
@@ -37,15 +37,11 @@ export class EncryptionService {// Version identifier for encryption scheme (8-b
   private utxoPrivateKeyV2: string | null = null;
 
   /**
-   * Generate an encryption key from a wallet keypair (V2 format)
-   * @param keypair The Solana keypair to derive the encryption key from
-   * @returns The generated encryption key
-   */
-  public deriveEncryptionKeyFromWallet(keypair: Keypair): EncryptionKey {
-    // Sign a constant message with the keypair
-    const message = Buffer.from('Privacy Money account sign in');
-    const signature = nacl.sign.detached(message, keypair.secretKey);
-
+ * Generate an encryption key from a signature
+ * @param signature The user's signature
+ * @returns The generated encryption key
+ */
+  public deriveEncryptionKeyFromSignature(signature: Uint8Array): EncryptionKey {
     // Extract the first 31 bytes of the signature to create a deterministic key (legacy method)
     const encryptionKeyV1 = signature.slice(0, 31);
 
@@ -70,6 +66,19 @@ export class EncryptionService {// Version identifier for encryption scheme (8-b
       v1: this.encryptionKeyV1,
       v2: this.encryptionKeyV2
     };
+
+  }
+
+  /**
+   * Generate an encryption key from a wallet keypair (V2 format)
+   * @param keypair The Solana keypair to derive the encryption key from
+   * @returns The generated encryption key
+   */
+  public deriveEncryptionKeyFromWallet(keypair: Keypair): EncryptionKey {
+    // Sign a constant message with the keypair
+    const message = Buffer.from('Privacy Money account sign in');
+    const signature = nacl.sign.detached(message, keypair.secretKey);
+    return this.deriveEncryptionKeyFromSignature(signature)
   }
 
   /**

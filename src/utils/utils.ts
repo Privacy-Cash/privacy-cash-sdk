@@ -6,12 +6,12 @@
  */
 
 import BN from 'bn.js';
-import { Utxo } from '../models/utxo.ts';
+import { Utxo } from '../models/utxo.js';
 import * as borsh from 'borsh';
 import { sha256 } from '@ethersproject/sha2';
 import { PublicKey } from '@solana/web3.js';
-import { DEPOSIT_FEE_RATE, INDEXER_API_URL, PROGRAM_ID, WITHDRAW_FEE_RATE } from './constants.ts';
-import { logger } from './logger.ts';
+import { DEPOSIT_FEE_RATE, INDEXER_API_URL, PROGRAM_ID, WITHDRAW_FEE_RATE } from './constants.js';
+import { logger } from './logger.js';
 
 /**
  * Calculate deposit fee based on deposit amount and fee rate
@@ -111,11 +111,6 @@ export function getExtDataHash(extData: {
   // Convert from hex string to Uint8Array
   return Buffer.from(hashHex.slice(2), 'hex');
 }
-
-export function overwriteLog(s: string) {
-  process.stdout.write(`\r${s} `);
-}
-
 
 
 // Function to fetch Merkle proof from API for a given commitment
