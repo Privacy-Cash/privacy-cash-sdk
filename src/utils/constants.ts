@@ -15,12 +15,6 @@ export const TRANSACT_IX_DISCRIMINATOR = Buffer.from([217, 149, 130, 143, 221, 5
 
 export const MERKLE_TREE_DEPTH = 26;
 
-export const DEPOSIT_FEE_RATE = 0;
-
-export const WITHDRAW_FEE_RATE = 35 / 10000;
-
-export const WITHDRAW_RENT_FEE = 0.006; // sol
-
 export const ALT_ADDRESS = new PublicKey('72bpRay17JKp4k8H87p7ieU9C6aRDy5yCqwvtpTN2wuU');
 
 export const INDEXER_API_URL = 'https://api3.privacycash.org';

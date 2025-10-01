@@ -8,6 +8,7 @@
     "./getUtxos": "./dist/getUtxos.js",
     "./deposit": "./dist/deposit.js",
     "./withdraw": "./dist/withdraw.js",
+    "./config": "./dist/config.js",
     "./encryption": "./dist/utils/encryption.js",
     "./logger": "./dist/utils/logger.js"
   },
