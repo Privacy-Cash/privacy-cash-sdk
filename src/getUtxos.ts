@@ -173,19 +173,18 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
 
 
     let decryptionTaskTotal = data.total + cachedStringNum - roundStartIndex;
-    // check fetched string
-    for (let i = 0; i < encryptedOutputs.length; i++) {
-        const encryptedOutput = encryptedOutputs[i];
-        if (decryptionTaskFinished % 100 == 0) {
-            logger.info(`(decrypting utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
-        }
-        let dres = await decrypt_output(encryptedOutput, encryptionService, utxoKeypair, lightWasm, connection)
-        decryptionTaskFinished++
+    let batchRes = await decrypt_outputs(encryptedOutputs, encryptionService, utxoKeypair, lightWasm)
+    decryptionTaskFinished += encryptedOutputs.length
+    console.log('batchReslen', batchRes.length)
+    for (let i = 0; i < batchRes.length; i++) {
+        let dres = batchRes[i]
         if (dres.status == 'decrypted' && dres.utxo) {
+            logger.debug(`got a descripted utxo from fetching`, dres.utxo.index)
             myUtxos.push(dres.utxo)
-            myEncryptedOutputs.push(encryptedOutput)
+            myEncryptedOutputs.push(dres.encryptedOutput!)
         }
     }
+
     // check cached string when no more fetching tasks
     if (!data.hasMore) {
         if (cachedString) {
@@ -194,12 +193,15 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
                 if (decryptionTaskFinished % 100 == 0) {
                     logger.info(`(decrypting cached utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
                 }
-                let dres = await decrypt_output(encryptedOutput, encryptionService, utxoKeypair, lightWasm, connection)
-                decryptionTaskFinished++
-                if (dres.status == 'decrypted' && dres.utxo) {
-                    logger.debug(`got a descripted utxo from caching `)
-                    myUtxos.push(dres.utxo)
-                    myEncryptedOutputs.push(encryptedOutput)
+                let batchRes = await decrypt_outputs(cachedEncryptedOutputs, encryptionService, utxoKeypair, lightWasm)
+                decryptionTaskFinished += cachedEncryptedOutputs.length
+                console.log('cachedbatchReslen', batchRes.length, ' source', cachedEncryptedOutputs.length)
+                for (let i = 0; i < batchRes.length; i++) {
+                    let dres = batchRes[i]
+                    if (dres.status == 'decrypted' && dres.utxo) {
+                        myUtxos.push(dres.utxo)
+                        myEncryptedOutputs.push(dres.encryptedOutput!)
+                    }
                 }
             }
         }
@@ -315,7 +317,7 @@ export function getBalanceFromUtxos(utxos: Utxo[]) {
 }
 
 // Decrypt single output to Utxo
-type DecryptRes = { status: 'decrypted' | 'skipped' | 'unDecrypted', utxo?: Utxo }
+type DecryptRes = { status: 'decrypted' | 'skipped' | 'unDecrypted', utxo?: Utxo, encryptedOutput?: string }
 async function decrypt_output(
     encryptedOutput: string,
     encryptionService: EncryptionService,
@@ -408,4 +410,58 @@ async function decrypt_output(
         // this UTXO doesn't belong to the user
     }
     return res
+}
+
+async function decrypt_outputs(
+    encryptedOutputs: string[],
+    encryptionService: EncryptionService,
+    utxoKeypair: UtxoKeypair,
+    lightWasm: any,
+): Promise<DecryptRes[]> {
+    let results: DecryptRes[] = [];
+
+    // decript all UTXO
+    for (const encryptedOutput of encryptedOutputs) {
+        if (!encryptedOutput) {
+            results.push({ status: 'skipped' });
+            continue;
+        }
+        try {
+            const utxo = await encryptionService.decryptUtxo(
+                encryptedOutput,
+                lightWasm
+            );
+            results.push({ status: 'decrypted', utxo, encryptedOutput });
+        } catch {
+            results.push({ status: 'unDecrypted' });
+        }
+    }
+    results = results.filter(r => r.status == 'decrypted')
+    if (!results.length) {
+        return []
+    }
+
+    // update utxo index
+    if (results.length > 0) {
+        let encrypted_outputs = results.map(r => r.encryptedOutput)
+
+        let url = INDEXER_API_URL + `/utxos/indices`
+        let res = await fetch(url, {
+            method: 'POST', headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ encrypted_outputs })
+        })
+        let j = await res.json()
+        if (!j.indices || !Array.isArray(j.indices) || j.indices.length != encrypted_outputs.length) {
+            throw new Error('failed fetching /utxos/indices')
+        }
+        for (let i = 0; i < results.length; i++) {
+            let utxo = results[i].utxo
+            if (utxo!.index !== j.indices[i] && typeof j.indices[i] == 'number') {
+                console.log(`Updated UTXO index from ${utxo!.index} to ${j.indices[i]}`);
+                utxo!.index = j.indices[i]
+            }
+        }
+    }
+
+    return results;
 }
