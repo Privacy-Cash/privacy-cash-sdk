@@ -414,20 +414,6 @@ export class EncryptionService {// Version identifier for encryption scheme (8-b
   }
 }
 
-export function findCrossCheckNullifierPDAs(proof: any) {
-  const [nullifier2PDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("nullifier0"), Buffer.from(proof.inputNullifiers[1])],
-    PROGRAM_ID
-  );
-
-  const [nullifier3PDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("nullifier1"), Buffer.from(proof.inputNullifiers[0])],
-    PROGRAM_ID
-  );
-
-  return { nullifier2PDA, nullifier3PDA };
-}
-
 export function serializeProofAndExtData(proof: any, extData: any) {
   // Create the ExtDataMinified object for the program call (only extAmount and fee)
   const extDataMinified = {
