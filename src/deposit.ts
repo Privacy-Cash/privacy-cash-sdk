@@ -60,6 +60,12 @@ type DepositParams = {
     transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
 export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner }: DepositParams) {
+    // check limit
+    let limitAmount = await checkDepositLimit(connection)
+    if (limitAmount && amount_in_lamports > limitAmount * LAMPORTS_PER_SOL) {
+        throw new Error(`Don't deposit more than ${limitAmount} SOL`)
+    }
+
     // const amount_in_lamports = amount_in_sol * LAMPORTS_PER_SOL
     const fee_amount_in_lamports = 0
     logger.debug('Encryption key generated from user keypair');
@@ -426,4 +432,60 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
         retryTimes++
     }
 
+}
+
+
+async function checkDepositLimit(connection: Connection) {
+    try {
+        console.log('📊 Reading deposit limit from MerkleTreeAccount...\n');
+
+        // Derive the tree account PDA
+        const [treeAccount] = PublicKey.findProgramAddressSync(
+            [Buffer.from('merkle_tree')],
+            PROGRAM_ID
+        );
+
+
+        // Fetch the account data
+        const accountInfo = await connection.getAccountInfo(treeAccount);
+
+        if (!accountInfo) {
+            console.error('❌ Tree account not found. Make sure the program is initialized.');
+            return;
+        }
+
+        console.log(`Account data size: ${accountInfo.data.length} bytes`);
+        const authority = new PublicKey(accountInfo.data.slice(8, 40));
+        const nextIndex = new BN(accountInfo.data.slice(40, 48), 'le');
+        const rootIndex = new BN(accountInfo.data.slice(4112, 4120), 'le');
+        const maxDepositAmount = new BN(accountInfo.data.slice(4120, 4128), 'le');
+        const bump = accountInfo.data[4128];
+
+        console.log('\n📋 MerkleTreeAccount Details:');
+        console.log(`┌─ Authority: ${authority.toString()}`);
+        console.log(`├─ Next Index: ${nextIndex.toString()}`);
+        console.log(`├─ Root Index: ${rootIndex.toString()}`);
+        console.log(`├─ Max Deposit Amount: ${maxDepositAmount.toString()} lamports`);
+
+        // Convert to SOL using BN division to handle large numbers
+        const lamportsPerSol = new BN(1_000_000_000);
+        const maxDepositSol = maxDepositAmount.div(lamportsPerSol);
+        const remainder = maxDepositAmount.mod(lamportsPerSol);
+
+        // Format the SOL amount with decimals
+        let solFormatted = '1';
+        if (remainder.eq(new BN(0))) {
+            solFormatted = maxDepositSol.toString();
+        } else {
+            // Handle fractional SOL by converting remainder to decimal
+            const fractional = remainder.toNumber() / 1e9;
+            solFormatted = `${maxDepositSol.toString()}${fractional.toFixed(9).substring(1)}`;
+        }
+        console.log('solFormatted', solFormatted)
+        return Number(solFormatted)
+
+    } catch (error) {
+        console.log('❌ Error reading deposit limit:', error);
+        throw error
+    }
 }
