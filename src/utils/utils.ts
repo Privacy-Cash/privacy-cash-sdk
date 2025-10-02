@@ -196,3 +196,18 @@ export function getProgramAccounts() {
   );
   return { treeAccount, treeTokenAccount, globalConfigAccount }
 }
+
+
+export function findCrossCheckNullifierPDAs(proof: any) {
+  const [nullifier2PDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("nullifier0"), Buffer.from(proof.inputNullifiers[1])],
+    PROGRAM_ID
+  );
+
+  const [nullifier3PDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("nullifier1"), Buffer.from(proof.inputNullifiers[0])],
+    PROGRAM_ID
+  );
+
+  return { nullifier2PDA, nullifier3PDA };
+}

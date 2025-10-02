@@ -5,9 +5,11 @@ import { Keypair as UtxoKeypair } from './models/keypair.js';
 import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
-import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, INDEXER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID, } from './utils/constants.js';
-import { EncryptionService, findCrossCheckNullifierPDAs, serializeProofAndExtData } from './utils/encryption.js';
-import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
+
+import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, INDEXER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
+import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
+import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
+
 import { getUtxos, isUtxoSpent } from './getUtxos.js';
 import { logger } from './utils/logger.js';
 import { getConfig } from './config.js';
@@ -82,22 +84,8 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const allUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
-    logger.debug(`Found ${allUtxos.length} total UTXOs`);
-
-    // Filter out zero-amount UTXOs (dummy UTXOs that can't be spent)
-    const nonZeroUtxos = allUtxos.filter(utxo => utxo.amount.gt(new BN(0)));
-    logger.debug(`Found ${nonZeroUtxos.length} non-zero UTXOs`);
-
-    // Check which non-zero UTXOs are unspent
-    logger.debug('Checking which UTXOs are unspent...');
-    const utxoSpentStatuses = await Promise.all(
-        nonZeroUtxos.map(utxo => isUtxoSpent(connection, utxo))
-    );
-
-    // Filter to only include unspent UTXOs
-    const unspentUtxos = nonZeroUtxos.filter((utxo, index) => !utxoSpentStatuses[index]);
-    logger.debug(`Found ${unspentUtxos.length} unspent UTXOs available for spending`);
+    const unspentUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
+    logger.debug(`Found ${unspentUtxos.length} total UTXOs`);
 
     // Calculate and log total unspent UTXO balance
     const totalUnspentBalance = unspentUtxos.reduce((sum, utxo) => sum.add(utxo.amount), new BN(0));

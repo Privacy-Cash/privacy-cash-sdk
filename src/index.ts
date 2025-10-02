@@ -2,7 +2,7 @@ import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, VersionedTransaction 
 import { deposit } from './deposit.js';
 import { getBalanceFromUtxos, getUtxos, localstorageKey } from './getUtxos.js';
 
-import { LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET } from './utils/constants.js';
+import { LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET } from './utils/constants.js';
 import { logger, type LoggerFn, setLogger } from './utils/logger.js';
 import { EncryptionService } from './utils/encryption.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
@@ -51,7 +51,7 @@ export class PrivacyCash {
             return this
         }
         storage.removeItem(LSK_FETCH_OFFSET + localstorageKey(this.publicKey))
-        storage.removeItem(LSK_ENCRPTED_OUTPUTS + localstorageKey(this.publicKey))
+        storage.removeItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(this.publicKey))
         return this
     }
 

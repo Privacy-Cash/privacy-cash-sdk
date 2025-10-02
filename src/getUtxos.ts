@@ -6,7 +6,7 @@ import { EncryptionService } from './utils/encryption.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
 //@ts-ignore
 import * as ffjavascript from 'ffjavascript';
-import { FETCH_UTXOS_GROUP_SIZE, INDEXER_API_URL, LSK_ENCRPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
+import { FETCH_UTXOS_GROUP_SIZE, INDEXER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
 import { logger } from './utils/logger.js';
 
 // Use type assertion for the utility functions (same pattern as in get_verification_keys.ts)
@@ -97,7 +97,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
                         }
                     }
                     storage.setItem(LSK_FETCH_OFFSET + localstorageKey(publicKey), (fetch_utxo_offset + fetched.len).toString())
-                    if (!fetched.hashMore) {
+                    if (!fetched.hasMore) {
                         break
                     }
                     await sleep(100)
@@ -109,7 +109,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
             }
             // store valid strings
             valid_strings = [...new Set(valid_strings)];
-            storage.setItem(LSK_ENCRPTED_OUTPUTS + localstorageKey(publicKey), JSON.stringify(valid_strings))
+            storage.setItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey), JSON.stringify(valid_strings))
             return valid_utxos
         })()
     }
@@ -125,7 +125,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
 }): Promise<{
     encryptedOutputs: string[],
     utxos: Utxo[],
-    hashMore: boolean,
+    hasMore: boolean,
     len: number
 }> {
     const lightWasm = await WasmFactory.getInstance();
@@ -166,7 +166,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
     let successfulDecryptions = 0;
 
     let cachedStringNum = 0
-    let cachedString = storage.getItem(LSK_ENCRPTED_OUTPUTS + localstorageKey(publicKey))
+    let cachedString = storage.getItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey))
     if (cachedString) {
         cachedStringNum = JSON.parse(cachedString).length
     }
@@ -205,7 +205,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
         }
     }
 
-    return { encryptedOutputs: myEncryptedOutputs, utxos: myUtxos, hashMore: data.hasMore, len: encryptedOutputs.length };
+    return { encryptedOutputs: myEncryptedOutputs, utxos: myUtxos, hasMore: data.hasMore, len: encryptedOutputs.length };
 }
 
 /**
