@@ -1,16 +1,11 @@
 {
   "name": "privacycash",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "",
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./getUtxos": "./dist/getUtxos.js",
-    "./deposit": "./dist/deposit.js",
-    "./withdraw": "./dist/withdraw.js",
-    "./config": "./dist/config.js",
-    "./encryption": "./dist/utils/encryption.js",
-    "./logger": "./dist/utils/logger.js"
+    "./utils": "./dist/exportUtils.js"
   },
   "types": "dist/index.d.ts",
   "type": "module",
