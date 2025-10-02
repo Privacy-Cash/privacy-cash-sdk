@@ -10,16 +10,17 @@ import { Utxo } from '../models/utxo.js';
 import * as borsh from 'borsh';
 import { sha256 } from '@ethersproject/sha2';
 import { PublicKey } from '@solana/web3.js';
-import { DEPOSIT_FEE_RATE, INDEXER_API_URL, PROGRAM_ID, WITHDRAW_FEE_RATE } from './constants.js';
+import { INDEXER_API_URL, PROGRAM_ID } from './constants.js';
 import { logger } from './logger.js';
+import { getConfig } from '../config.js';
 
 /**
  * Calculate deposit fee based on deposit amount and fee rate
  * @param depositAmount Amount being deposited in lamports
  * @returns Fee amount in lamports
  */
-export function calculateDepositFee(depositAmount: number): number {
-  return Math.floor(depositAmount * DEPOSIT_FEE_RATE / 10000);
+export async function calculateDepositFee(depositAmount: number) {
+  return Math.floor(depositAmount * (await getConfig('deposit_fee_rate')) / 10000);
 }
 
 /**
@@ -27,8 +28,8 @@ export function calculateDepositFee(depositAmount: number): number {
  * @param withdrawalAmount Amount being withdrawn in lamports
  * @returns Fee amount in lamports
  */
-export function calculateWithdrawalFee(withdrawalAmount: number): number {
-  return Math.floor(withdrawalAmount * WITHDRAW_FEE_RATE / 10000);
+export async function calculateWithdrawalFee(withdrawalAmount: number) {
+  return Math.floor(withdrawalAmount * (await getConfig('withdraw_fee_rate')) / 10000);
 }
 
 /**

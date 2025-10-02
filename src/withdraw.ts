@@ -5,11 +5,14 @@ import { Keypair as UtxoKeypair } from './models/keypair.js';
 import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
-import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, INDEXER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID, WITHDRAW_FEE_RATE, WITHDRAW_RENT_FEE } from './utils/constants.js';
+
+import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, INDEXER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
+
 import { getUtxos, isUtxoSpent } from './getUtxos.js';
 import { logger } from './utils/logger.js';
+import { getConfig } from './config.js';
 // Indexer API endpoint
 
 
@@ -53,7 +56,7 @@ type WithdrawParams = {
 }
 
 export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath }: WithdrawParams) {
-    let fee_in_lamports = amount_in_lamports * WITHDRAW_FEE_RATE + LAMPORTS_PER_SOL * WITHDRAW_RENT_FEE
+    let fee_in_lamports = amount_in_lamports * (await getConfig('withdraw_fee_rate')) + LAMPORTS_PER_SOL * (await getConfig('withdraw_rent_fee'))
     amount_in_lamports -= fee_in_lamports
     let isPartial = false
 
