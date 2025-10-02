@@ -24,18 +24,21 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           cache: "npm"
 
+      # Get previous version from the last commit in origin/main
       - name: Get previous package.json version
         run: |
           PREV=$(git show origin/main~1:package.json | jq -r .version)
           echo "Previous version: $PREV"
           echo "PREV_VERSION=$PREV" >> $GITHUB_ENV
 
+      # Get current version from package.json
       - name: Get current package.json version
         run: |
           CURR=$(jq -r .version package.json)
           echo "CURR_VERSION=$CURR"
           echo "CURR_VERSION=$CURR" >> $GITHUB_ENV
 
+      # Compare previous and current versions
       - name: Compare versions
         run: |
           if [ "$PREV_VERSION" = "$CURR_VERSION" ]; then
@@ -46,6 +49,17 @@ jobs:
             echo "SHOULD_PUBLISH=true" >> $GITHUB_ENV
           fi
 
+      # Install dependencies only if publish is needed
+      - name: Install dependencies
+        if: env.SHOULD_PUBLISH == 'true'
+        run: npm ci
+
+      # Run build script before publishing
+      - name: Build project
+        if: env.SHOULD_PUBLISH == 'true'
+        run: npm run build
+
+      # Publish to npm
       - name: Publish to npm
         if: env.SHOULD_PUBLISH == 'true'
         run: npm publish
