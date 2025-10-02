@@ -179,12 +179,11 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
     for (let i = 0; i < batchRes.length; i++) {
         let dres = batchRes[i]
         if (dres.status == 'decrypted' && dres.utxo) {
-            logger.debug(`got a descripted utxo from fetching`, dres.utxo.index)
             myUtxos.push(dres.utxo)
             myEncryptedOutputs.push(dres.encryptedOutput!)
         }
     }
-
+    logger.info(`(decrypting cached utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
     // check cached string when no more fetching tasks
     if (!data.hasMore) {
         if (cachedString) {
