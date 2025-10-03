@@ -1,4 +1,6 @@
 ## Privacy Cash SDK
+This is the SDK for Privacy Cash. It has been audited by Zigtur (https://x.com/zigtur).
+
 ### Tests
 1. To run unit tests:
 ```
