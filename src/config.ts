@@ -1,4 +1,4 @@
-import { INDEXER_API_URL } from "./utils/constants";
+import { INDEXER_API_URL } from "./utils/constants.js";
 
 type Config = {
     withdraw_fee_rate: number
