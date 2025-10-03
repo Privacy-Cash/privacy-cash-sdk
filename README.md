@@ -8,6 +8,8 @@ Main APIs for this SDK are: deposit(), withdraw(), getPrivateBalance().
 
 Check the example project under /example folder. The code should be fairly self-explanatory.
 
+Use node version 24 or above.
+
 ### Tests
 1. To run unit tests:
 ```
