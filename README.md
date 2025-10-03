@@ -1,6 +1,13 @@
 ## Privacy Cash SDK
 This is the SDK for Privacy Cash. It has been audited by Zigtur (https://x.com/zigtur).
 
+### Usage
+This SDK provides APIs for developers to interact with Privacy Cash relayers easily. Developers can easily deposit/withdraw/query balances in Privacy Cash solana program.
+
+Main APIs for this SDK are: deposit(), withdraw(), getPrivateBalance().
+
+Check the example project under /example folder. The code should be fairly self-explanatory.
+
 ### Tests
 1. To run unit tests:
 ```
