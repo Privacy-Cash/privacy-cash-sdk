@@ -3,6 +3,8 @@
 # dependencies
 /node_modules
 /example/node_modules
+/example/test.ts
+/example/cache
 /.pnp
 .pnp.*
 .yarn/*

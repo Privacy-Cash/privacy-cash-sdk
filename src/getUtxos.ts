@@ -175,7 +175,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
     let decryptionTaskTotal = data.total + cachedStringNum - roundStartIndex;
     let batchRes = await decrypt_outputs(encryptedOutputs, encryptionService, utxoKeypair, lightWasm)
     decryptionTaskFinished += encryptedOutputs.length
-    console.log('batchReslen', batchRes.length)
+    logger.debug('batchReslen', batchRes.length)
     for (let i = 0; i < batchRes.length; i++) {
         let dres = batchRes[i]
         if (dres.status == 'decrypted' && dres.utxo) {
@@ -194,7 +194,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
                 }
                 let batchRes = await decrypt_outputs(cachedEncryptedOutputs, encryptionService, utxoKeypair, lightWasm)
                 decryptionTaskFinished += cachedEncryptedOutputs.length
-                console.log('cachedbatchReslen', batchRes.length, ' source', cachedEncryptedOutputs.length)
+                logger.debug('cachedbatchReslen', batchRes.length, ' source', cachedEncryptedOutputs.length)
                 for (let i = 0; i < batchRes.length; i++) {
                     let dres = batchRes[i]
                     if (dres.status == 'decrypted' && dres.utxo) {
@@ -456,7 +456,7 @@ async function decrypt_outputs(
         for (let i = 0; i < results.length; i++) {
             let utxo = results[i].utxo
             if (utxo!.index !== j.indices[i] && typeof j.indices[i] == 'number') {
-                console.log(`Updated UTXO index from ${utxo!.index} to ${j.indices[i]}`);
+                logger.debug(`Updated UTXO index from ${utxo!.index} to ${j.indices[i]}`);
                 utxo!.index = j.indices[i]
             }
         }

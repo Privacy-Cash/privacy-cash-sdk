@@ -32,7 +32,7 @@ async function relayDepositToIndexer(signedTransaction: string, publicKey: Publi
         });
 
         if (!response.ok) {
-            logger.info('res text:', await response.text())
+            logger.error('res text:', await response.text())
             throw new Error('response not ok')
             // const errorData = await response.json() as { error?: string };
             // throw new Error(`Deposit relay failed: ${response.status} ${response.statusText} - ${errorData.error || 'Unknown error'}`);
@@ -437,7 +437,6 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
 
 async function checkDepositLimit(connection: Connection) {
     try {
-        console.log('📊 Reading deposit limit from MerkleTreeAccount...\n');
 
         // Derive the tree account PDA
         const [treeAccount] = PublicKey.findProgramAddressSync(

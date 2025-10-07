@@ -18,9 +18,12 @@ export class PrivacyCash {
     public publicKey: PublicKey
     private encryptionService: EncryptionService
     private keypair: Keypair
-    constructor({ RPC_url, owner }: {
+    private isRuning?: boolean = false
+    private status: string = ''
+    constructor({ RPC_url, owner, enableDebug }: {
         RPC_url: string,
         owner: string | number[] | Uint8Array | Keypair,
+        enableDebug?: boolean
     }) {
         let keypair = getSolanaKeypair(owner)
         if (!keypair) {
@@ -31,6 +34,16 @@ export class PrivacyCash {
         this.publicKey = keypair.publicKey
         this.encryptionService = new EncryptionService();
         this.encryptionService.deriveEncryptionKeyFromWallet(this.keypair);
+        if (!enableDebug) {
+            this.startStatusRender()
+            this.setLogger((level, message) => {
+                if (level == 'info') {
+                    this.status = message
+                } else if (level == 'error') {
+                    console.log('error message: ', message)
+                }
+            })
+        }
     }
 
     setLogger(loger: LoggerFn) {
@@ -63,8 +76,10 @@ export class PrivacyCash {
     async deposit({ lamports }: {
         lamports: number
     }) {
+        this.isRuning = true
+        logger.info('start depositting')
         let lightWasm = await WasmFactory.getInstance()
-        return await deposit({
+        let res = await deposit({
             lightWasm,
             amount_in_lamports: lamports,
             connection: this.connection,
@@ -77,6 +92,8 @@ export class PrivacyCash {
             keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
             storage
         })
+        this.isRuning = false
+        return res
     }
 
     /**
@@ -88,25 +105,33 @@ export class PrivacyCash {
         lamports: number,
         recipientAddress?: string
     }) {
+        this.isRuning = true
+        logger.info('start withdrawing')
         let lightWasm = await WasmFactory.getInstance()
-        return await withdraw({
+        let recipient = recipientAddress ? new PublicKey(recipientAddress) : this.publicKey
+        let res = await withdraw({
             lightWasm,
             amount_in_lamports: lamports,
             connection: this.connection,
             encryptionService: this.encryptionService,
             publicKey: this.publicKey,
-            recipient: recipientAddress ? new PublicKey(recipientAddress) : this.publicKey,
+            recipient,
             keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
             storage
         })
+        console.log(`Withdraw successful. Recipient ${recipient} received ${res.amount_in_lamports / LAMPORTS_PER_SOL} SOL, with ${res.fee_in_lamports / LAMPORTS_PER_SOL} SOL relayers fees`)
+        this.isRuning = false
+        return res
     }
 
     /**
      * Returns the amount of lamports current wallet has in Privacy Cash.
      */
     async getPrivateBalance() {
+        logger.info('getting private balance')
+        this.isRuning = true
         let utxos = await getUtxos({ publicKey: this.publicKey, connection: this.connection, encryptionService: this.encryptionService, storage })
-        console.log('got utxos', utxos.length)
+        this.isRuning = false
         return getBalanceFromUtxos(utxos)
     }
 
@@ -115,6 +140,19 @@ export class PrivacyCash {
      */
     isBrowser() {
         return typeof window !== "undefined"
+    }
+
+    async startStatusRender() {
+        let frames = ['-', '\\', '|', '/'];
+        let i = 0
+        while (true) {
+            if (this.isRuning) {
+                let k = i % frames.length
+                i++
+                stdWrite(this.status, frames[k])
+            }
+            await new Promise(r => setTimeout(r, 250));
+        }
     }
 }
 
@@ -144,4 +182,10 @@ function getSolanaKeypair(
     } catch {
         return null;
     }
+}
+
+function stdWrite(status: string, frame: string) {
+    let blue = "\x1b[34m";
+    let reset = "\x1b[0m";
+    process.stdout.write(`${frame}status: ${blue}${status}${reset}\r`);
 }
