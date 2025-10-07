@@ -39,6 +39,8 @@ export class PrivacyCash {
             this.setLogger((level, message) => {
                 if (level == 'info') {
                     this.status = message
+                } else if (level == 'error') {
+                    console.log('error message: ', message)
                 }
             })
         }
@@ -75,6 +77,7 @@ export class PrivacyCash {
         lamports: number
     }) {
         this.isRuning = true
+        logger.info('start depositting')
         let lightWasm = await WasmFactory.getInstance()
         let res = await deposit({
             lightWasm,
@@ -103,6 +106,7 @@ export class PrivacyCash {
         recipientAddress?: string
     }) {
         this.isRuning = true
+        logger.info('start withdrawing')
         let lightWasm = await WasmFactory.getInstance()
         let recipient = recipientAddress ? new PublicKey(recipientAddress) : this.publicKey
         let res = await withdraw({

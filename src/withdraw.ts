@@ -323,7 +323,6 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         let resJson = await res.json()
         console.log('resJson:', resJson)
         if (resJson.exists) {
-            console.log(`Withdraw successfully in ${((Date.now() - start) / 1000).toFixed(2)} seconds!`);
             return { isPartial, tx: signature, recipient: recipient.toString(), amount_in_lamports, fee_in_lamports }
         }
         if (retryTimes >= 10) {
