@@ -21,7 +21,8 @@ async function main() {
 
     // withdraw
     let withdrawRes = await client.withdraw({
-        lamports: 0.01 * 1_000_000_000
+        lamports: 0.01 * 1_000_000_000,
+        recipientAddress: '[RECIPIENT_ADDRESS]'
     })
     console.log(withdrawRes)
 
