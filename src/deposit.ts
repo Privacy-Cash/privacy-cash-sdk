@@ -14,14 +14,18 @@ import { logger } from './utils/logger.js';
 
 
 // Function to relay pre-signed deposit transaction to indexer backend
-async function relayDepositToIndexer(signedTransaction: string, publicKey: PublicKey): Promise<string> {
+async function relayDepositToIndexer(signedTransaction: string, publicKey: PublicKey, referrer?: string): Promise<string> {
     try {
         logger.debug('Relaying pre-signed deposit transaction to indexer backend...');
 
-        const params = {
+        const params: any = {
             signedTransaction,
             senderAddress: publicKey.toString()
         };
+
+        if (referrer) {
+            params.referralWalletAddress = referrer
+        }
 
         const response = await fetch(`${INDEXER_API_URL}/deposit`, {
             method: 'POST',
@@ -57,9 +61,10 @@ type DepositParams = {
     encryptionService: EncryptionService,
     keyBasePath: string,
     lightWasm: hasher.LightWasm,
+    referrer?: string,
     transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
-export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner }: DepositParams) {
+export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner, referrer }: DepositParams) {
     // check limit
     let limitAmount = await checkDepositLimit(connection)
     if (limitAmount && amount_in_lamports > limitAmount * LAMPORTS_PER_SOL) {
@@ -406,7 +411,7 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
 
     // Relay the pre-signed transaction to indexer backend
     logger.info('submitting transaction to relayer...')
-    const signature = await relayDepositToIndexer(serializedTransaction, publicKey);
+    const signature = await relayDepositToIndexer(serializedTransaction, publicKey, referrer);
     logger.debug('Transaction signature:', signature);
     logger.debug(`Transaction link: https://explorer.solana.com/tx/${signature}`);
 
