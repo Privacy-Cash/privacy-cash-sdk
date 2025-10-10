@@ -17,7 +17,7 @@ export const MERKLE_TREE_DEPTH = 26;
 
 export const ALT_ADDRESS = new PublicKey('72bpRay17JKp4k8H87p7ieU9C6aRDy5yCqwvtpTN2wuU');
 
-export const INDEXER_API_URL = 'https://api3.privacycash.org';
+export const INDEXER_API_URL = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api3.privacycash.org';
 
 export const SIGN_MESSAGE = `Privacy Money account sign in`
 
