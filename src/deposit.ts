@@ -277,7 +277,8 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
 
     // Create the deposit ExtData with real encrypted outputs
     const extData = {
-        recipient: publicKey,
+        // recipient - just a placeholder, not actually used for deposits. 
+        recipient: new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM'),
         extAmount: new BN(extAmount),
         encryptedOutput1: encryptedOutput1,
         encryptedOutput2: encryptedOutput2,
@@ -371,8 +372,8 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
             { pubkey: commitment1PDA, isSigner: false, isWritable: true },
             { pubkey: treeTokenAccount, isSigner: false, isWritable: true },
             { pubkey: globalConfigAccount, isSigner: false, isWritable: false },
-            // recipient
-            { pubkey: publicKey, isSigner: false, isWritable: true },
+            // recipient - just a placeholder, not actually used for deposits. using an ALT address to save bytes
+            { pubkey: new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM'), isSigner: false, isWritable: true },
             // fee recipient
             { pubkey: FEE_RECIPIENT, isSigner: false, isWritable: true },
             // signer
