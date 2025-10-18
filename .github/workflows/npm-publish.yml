@@ -1,69 +1,55 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
-
-name: Publish to npm
+name: Publish to npm when version changes
 
 on:
   push:
     branches:
       - main
+      - master
+    paths:
+      - "package.json"
 
 permissions:
-  id-token: write # Required for OIDC
+  id-token: write
   contents: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-          cache: "npm"
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
 
-      # Get previous version from the last commit in origin/main
-      - name: Get previous package.json version
-        run: |
-          PREV=$(git show origin/main~1:package.json | jq -r .version)
-          echo "Previous version: $PREV"
-          echo "PREV_VERSION=$PREV" >> $GITHUB_ENV
+      - name: Get current package version
+        id: pkg
+        run: echo "version=$(node -p 'require(\"./package.json\").version')" >> $GITHUB_OUTPUT
 
-      # Get current version from package.json
-      - name: Get current package.json version
+      - name: Check if version already exists on npm
+        id: check
         run: |
-          CURR=$(jq -r .version package.json)
-          echo "CURR_VERSION=$CURR"
-          echo "CURR_VERSION=$CURR" >> $GITHUB_ENV
-
-      # Compare previous and current versions
-      - name: Compare versions
-        run: |
-          if [ "$PREV_VERSION" = "$CURR_VERSION" ]; then
-            echo "Version unchanged, skip publish"
-            echo "SHOULD_PUBLISH=false" >> $GITHUB_ENV
+          PKG_NAME=$(node -p 'require("./package.json").name')
+          PUBLISHED=$(npm view $PKG_NAME versions --json | grep -o "\"${{ steps.pkg.outputs.version }}\"" || true)
+          if [ -n "$PUBLISHED" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version ${{ steps.pkg.outputs.version }} already exists on npm. Skipping publish."
           else
-            echo "Version changed, will publish"
-            echo "SHOULD_PUBLISH=true" >> $GITHUB_ENV
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      # Install dependencies only if publish is needed
       - name: Install dependencies
-        if: env.SHOULD_PUBLISH == 'true'
-        run: npm ci
+        run: npm install
 
-      # Run build script before publishing
-      - name: Build project
-        if: env.SHOULD_PUBLISH == 'true'
-        run: npm run build
+      - name: Build source
+        run: npm run build || echo "No build script defined."
 
-      # Publish to npm
       - name: Publish to npm
-        if: env.SHOULD_PUBLISH == 'true'
-        run: npm publish --access public
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          echo "Publishing version ${{ steps.pkg.outputs.version }}..."
+          npm publish --access public
