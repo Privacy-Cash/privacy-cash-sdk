@@ -1,8 +1,9 @@
 {
   "name": "privacycash",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "",
   "main": "dist/index.js",
+  "repository": "https://github.com/Privacy-Cash/privacy-cash-sdk",
   "exports": {
     ".": "./dist/index.js",
     "./utils": "./dist/exportUtils.js"
