@@ -62,4 +62,4 @@ jobs:
       # Publish to npm
       - name: Publish to npm
         if: env.SHOULD_PUBLISH == 'true'
-        run: npm publish
+        run: npm publish --access public
