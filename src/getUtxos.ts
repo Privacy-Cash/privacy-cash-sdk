@@ -90,6 +90,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
                         const spentFlags = await areUtxosSpent(connection, nonZeroUtxos);
                         for (let i = 0; i < nonZeroUtxos.length; i++) {
                             if (!spentFlags[i]) {
+                                logger.debug(`found unspent encrypted_output ${nonZeroEncrypted[i]}`)
                                 am += nonZeroUtxos[i].amount.toNumber();
                                 valid_utxos.push(nonZeroUtxos[i]);
                                 valid_strings.push(nonZeroEncrypted[i]);
@@ -108,7 +109,9 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
                 getMyUtxosPromise = null
             }
             // store valid strings
+            logger.debug(`valid_strings len before set: ${valid_strings.length}`)
             valid_strings = [...new Set(valid_strings)];
+            logger.debug(`valid_strings len after set: ${valid_strings.length}`)
             storage.setItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey), JSON.stringify(valid_strings))
             return valid_utxos
         })()
