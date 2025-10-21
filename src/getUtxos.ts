@@ -191,19 +191,17 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
     if (!data.hasMore) {
         if (cachedString) {
             let cachedEncryptedOutputs = JSON.parse(cachedString)
-            for (let encryptedOutput of cachedEncryptedOutputs) {
-                if (decryptionTaskFinished % 100 == 0) {
-                    logger.info(`(decrypting cached utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
-                }
-                let batchRes = await decrypt_outputs(cachedEncryptedOutputs, encryptionService, utxoKeypair, lightWasm)
-                decryptionTaskFinished += cachedEncryptedOutputs.length
-                logger.debug('cachedbatchReslen', batchRes.length, ' source', cachedEncryptedOutputs.length)
-                for (let i = 0; i < batchRes.length; i++) {
-                    let dres = batchRes[i]
-                    if (dres.status == 'decrypted' && dres.utxo) {
-                        myUtxos.push(dres.utxo)
-                        myEncryptedOutputs.push(dres.encryptedOutput!)
-                    }
+            if (decryptionTaskFinished % 100 == 0) {
+                logger.info(`(decrypting cached utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
+            }
+            let batchRes = await decrypt_outputs(cachedEncryptedOutputs, encryptionService, utxoKeypair, lightWasm)
+            decryptionTaskFinished += cachedEncryptedOutputs.length
+            logger.debug('cachedbatchReslen', batchRes.length, ' source', cachedEncryptedOutputs.length)
+            for (let i = 0; i < batchRes.length; i++) {
+                let dres = batchRes[i]
+                if (dres.status == 'decrypted' && dres.utxo) {
+                    myUtxos.push(dres.utxo)
+                    myEncryptedOutputs.push(dres.encryptedOutput!)
                 }
             }
         }
