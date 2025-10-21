@@ -11,6 +11,6 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "privacycash": "^1.0.7"
+    "privacycash": "^1.0.13"
   }
 }
