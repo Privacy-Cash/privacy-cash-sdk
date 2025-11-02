@@ -1,6 +1,6 @@
 {
   "name": "privacycash",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "",
   "main": "dist/index.js",
   "repository": "https://github.com/Privacy-Cash/privacy-cash-sdk",
