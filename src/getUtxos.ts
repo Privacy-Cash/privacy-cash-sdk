@@ -82,6 +82,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
                     const nonZeroUtxos: Utxo[] = [];
                     const nonZeroEncrypted: any[] = [];
                     for (let [k, utxo] of fetched.utxos.entries()) {
+                        history_indexes.push(utxo.index)
                         if (utxo.amount.toNumber() > 0) {
                             nonZeroUtxos.push(utxo);
                             nonZeroEncrypted.push(fetched.encryptedOutputs[k]);
@@ -96,7 +97,6 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
                                 valid_utxos.push(nonZeroUtxos[i]);
                                 valid_strings.push(nonZeroEncrypted[i]);
                             }
-                            history_indexes.push(nonZeroUtxos[i].index)
                         }
                     }
                     storage.setItem(LSK_FETCH_OFFSET + localstorageKey(publicKey), (fetch_utxo_offset + fetched.len).toString())
