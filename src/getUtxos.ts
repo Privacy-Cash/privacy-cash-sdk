@@ -103,7 +103,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
                     if (!fetched.hasMore) {
                         break
                     }
-                    await sleep(100)
+                    await sleep(20)
                 }
             } catch (e: any) {
                 throw e
