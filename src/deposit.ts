@@ -1,7 +1,7 @@
 import { Connection, Keypair, PublicKey, TransactionInstruction, SystemProgram, ComputeBudgetProgram, VersionedTransaction, TransactionMessage, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Utxo } from './models/utxo.js';
-import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
+import { fetchMerkleProof, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
 import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.js';
 import * as hasher from '@lightprotocol/hasher.rs';
 import { MerkleTree } from './utils/merkle_tree.js';
@@ -344,7 +344,6 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
     // Find PDAs for nullifiers and commitments
     const { nullifier0PDA, nullifier1PDA } = findNullifierPDAs(proofToSubmit);
     const { nullifier2PDA, nullifier3PDA } = findCrossCheckNullifierPDAs(proofToSubmit);
-    const { commitment0PDA, commitment1PDA } = findCommitmentPDAs(proofToSubmit);
 
     // Address Lookup Table for transaction size optimization
     logger.debug('Setting up Address Lookup Table...');
@@ -368,8 +367,6 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
             { pubkey: nullifier1PDA, isSigner: false, isWritable: true },
             { pubkey: nullifier2PDA, isSigner: false, isWritable: false },
             { pubkey: nullifier3PDA, isSigner: false, isWritable: false },
-            { pubkey: commitment0PDA, isSigner: false, isWritable: true },
-            { pubkey: commitment1PDA, isSigner: false, isWritable: true },
             { pubkey: treeTokenAccount, isSigner: false, isWritable: true },
             { pubkey: globalConfigAccount, isSigner: false, isWritable: false },
             // recipient - just a placeholder, not actually used for deposits. using an ALT address to save bytes

@@ -146,20 +146,6 @@ export function findNullifierPDAs(proof: any) {
   return { nullifier0PDA, nullifier1PDA };
 }
 
-// Find commitment PDAs for the given proof
-export function findCommitmentPDAs(proof: any) {
-  const [commitment0PDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("commitment0"), Buffer.from(proof.outputCommitments[0])],
-    PROGRAM_ID
-  );
-
-  const [commitment1PDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("commitment1"), Buffer.from(proof.outputCommitments[1])],
-    PROGRAM_ID
-  );
-  return { commitment0PDA, commitment1PDA };
-}
-
 // Function to query remote tree state from indexer API
 export async function queryRemoteTreeState(): Promise<{ root: string, nextIndex: number }> {
   try {
