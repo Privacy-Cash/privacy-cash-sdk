@@ -6,7 +6,7 @@ import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { SPL_ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, SPL_PROGRAM_ID } from './utils/constants.js';
+import { SPL_ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, SPL_MERKLE_TREE_DEPTH, SPL_PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, getMintAddressField, getExtDataHashForSpl } from './utils/utilsSPL.js';
 
@@ -161,8 +161,8 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
             // For dummy UTXO (amount is 0), use a zero-filled proof
             if (utxo.amount.eq(new BN(0))) {
                 return {
-                    pathElements: [...new Array(MERKLE_TREE_DEPTH).fill("0")],
-                    pathIndices: Array(MERKLE_TREE_DEPTH).fill(0)
+                    pathElements: [...new Array(SPL_MERKLE_TREE_DEPTH).fill("0")],
+                    pathIndices: Array(SPL_MERKLE_TREE_DEPTH).fill(0)
                 };
             }
             // For real UTXOs, fetch the proof from API

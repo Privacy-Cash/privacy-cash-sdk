@@ -8,7 +8,7 @@ import { MerkleTree } from './utils/merkle_tree.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, SPL_PROGRAM_ID, SPL_ALT_ADDRESS } from './utils/constants.js';
+import { FIELD_SIZE, FEE_RECIPIENT, SPL_MERKLE_TREE_DEPTH, RELAYER_API_URL, SPL_PROGRAM_ID, SPL_ALT_ADDRESS } from './utils/constants.js';
 import { getProtocolAddressesWithMint, useExistingALT } from './utils/address_lookup_table.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getMint, getAccount } from '@solana/spl-token';
@@ -129,7 +129,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const { treeAccount, treeTokenAccount, globalConfigAccount } = getProgramAccounts()
 
     // Create the merkle tree with the pre-initialized poseidon hash
-    const tree = new MerkleTree(MERKLE_TREE_DEPTH, lightWasm);
+    const tree = new MerkleTree(SPL_MERKLE_TREE_DEPTH, lightWasm);
 
     // Initialize root and nextIndex variables
     const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
