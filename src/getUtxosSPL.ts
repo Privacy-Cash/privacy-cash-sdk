@@ -6,7 +6,7 @@ import { EncryptionService } from './utils/encryption.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
 //@ts-ignore
 import * as ffjavascript from 'ffjavascript';
-import { FETCH_UTXOS_GROUP_SIZE, RELAYER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
+import { FETCH_UTXOS_GROUP_SIZE, RELAYER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, SPL_PROGRAM_ID } from './utils/constants.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 
@@ -39,7 +39,7 @@ function sleep(ms: number): Promise<string> {
 }
 
 export function localstorageKey(key: PublicKey) {
-    return PROGRAM_ID.toString().substring(0, 6) + key.toString()
+    return SPL_PROGRAM_ID.toString().substring(0, 6) + key.toString()
 }
 
 type Utxos = { [k: string]: Utxo[] }
@@ -259,7 +259,7 @@ export async function isUtxoSpent(connection: Connection, utxo: Utxo): Promise<b
         // Try nullifier0 seed
         const [nullifier0PDA] = PublicKey.findProgramAddressSync(
             [Buffer.from("nullifier0"), Buffer.from(nullifierBytes)],
-            PROGRAM_ID
+            SPL_PROGRAM_ID
         );
 
         logger.debug(`Derived nullifier0 PDA: ${nullifier0PDA.toBase58()}`);
@@ -272,7 +272,7 @@ export async function isUtxoSpent(connection: Connection, utxo: Utxo): Promise<b
 
         const [nullifier1PDA] = PublicKey.findProgramAddressSync(
             [Buffer.from("nullifier1"), Buffer.from(nullifierBytes)],
-            PROGRAM_ID
+            SPL_PROGRAM_ID
         );
 
         logger.debug(`Derived nullifier1 PDA: ${nullifier1PDA.toBase58()}`);
@@ -306,11 +306,11 @@ async function areUtxosSpent(
 
             const [nullifier0PDA] = PublicKey.findProgramAddressSync(
                 [Buffer.from("nullifier0"), Buffer.from(nullifierBytes)],
-                PROGRAM_ID
+                SPL_PROGRAM_ID
             );
             const [nullifier1PDA] = PublicKey.findProgramAddressSync(
                 [Buffer.from("nullifier1"), Buffer.from(nullifierBytes)],
-                PROGRAM_ID
+                SPL_PROGRAM_ID
             );
 
             allPDAs.push({ utxoIndex: i, pda: nullifier0PDA });
@@ -388,7 +388,7 @@ async function decrypt_output(
             try {
                 const [commitment0PDA] = PublicKey.findProgramAddressSync(
                     [Buffer.from("commitment0"), Buffer.from(commitmentBytes)],
-                    PROGRAM_ID
+                    SPL_PROGRAM_ID
                 );
 
                 const account0Info = await connection.getAccountInfo(commitment0PDA);
@@ -409,7 +409,7 @@ async function decrypt_output(
                 try {
                     const [commitment1PDA] = PublicKey.findProgramAddressSync(
                         [Buffer.from("commitment1"), Buffer.from(commitmentBytes)],
-                        PROGRAM_ID
+                        SPL_PROGRAM_ID
                     );
 
                     const account1Info = await connection.getAccountInfo(commitment1PDA);

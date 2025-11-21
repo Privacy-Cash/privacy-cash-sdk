@@ -6,9 +6,9 @@ import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
+import { SPL_ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, SPL_PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
-import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getMintAddressField, getExtDataHashForSpl } from './utils/utils.js';
+import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, getMintAddressField, getExtDataHashForSpl } from './utils/utilsSPL.js';
 
 import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
 import { logger } from './utils/logger.js';
@@ -308,7 +308,6 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
 
     // Find PDAs for nullifiers and commitments
     const { nullifier0PDA, nullifier1PDA } = findNullifierPDAs(proofToSubmit);
-    const { nullifier2PDA, nullifier3PDA } = findCrossCheckNullifierPDAs(proofToSubmit);
     const { commitment0PDA, commitment1PDA } = findCommitmentPDAs(proofToSubmit);
 
     // Serialize the proof and extData
@@ -317,7 +316,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
 
     const [globalConfigPda, globalConfigPdaBump] = await PublicKey.findProgramAddressSync(
         [Buffer.from("global_config")],
-        PROGRAM_ID
+        SPL_PROGRAM_ID
     );
     const treeAta = getAssociatedTokenAddressSync(mintAddress, globalConfigPda, true);
 
@@ -327,8 +326,6 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         treeAccount: treeAccount.toString(),
         nullifier0PDA: nullifier0PDA.toString(),
         nullifier1PDA: nullifier1PDA.toString(),
-        nullifier2PDA: nullifier2PDA.toString(),
-        nullifier3PDA: nullifier3PDA.toString(),
         commitment0PDA: commitment0PDA.toString(),
         commitment1PDA: commitment1PDA.toString(),
         treeTokenAccount: treeTokenAccount.toString(),
@@ -337,7 +334,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         feeRecipientAccount: FEE_RECIPIENT.toString(),
         extAmount: extAmount,
         fee: fee_base_units,
-        lookupTableAddress: ALT_ADDRESS.toString(),
+        lookupTableAddress: SPL_ALT_ADDRESS.toString(),
         senderAddress: publicKey.toString(),
         treeAta: treeAta.toString(),
         recipientAta: recipient_ata.toString(),

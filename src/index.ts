@@ -119,7 +119,7 @@ export class PrivacyCash {
                 tx.sign([this.keypair])
                 return tx
             },
-            keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
+            keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2.spl'),
             storage
         })
         this.isRuning = false
@@ -146,7 +146,7 @@ export class PrivacyCash {
             encryptionService: this.encryptionService,
             publicKey: this.publicKey,
             recipient,
-            keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
+            keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2.spl'),
             storage
         })
         console.log(`Withdraw successful. Recipient ${recipient} received ${res.amount_in_lamports / LAMPORTS_PER_SOL} SOL, with ${res.fee_in_lamports / LAMPORTS_PER_SOL} SOL relayers fees`)

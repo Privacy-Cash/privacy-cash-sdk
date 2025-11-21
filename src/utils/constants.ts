@@ -29,3 +29,8 @@ export const LSK_FETCH_OFFSET = 'fetch_offset'
 export const LSK_ENCRYPTED_OUTPUTS = 'encrypted_outputs'
 
 export const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
+
+// SPL
+export const SPL_PROGRAM_ID = new PublicKey('9buNGKLVHL9PDmGKCBQwtAXiGVaqmYHgup9gJYySRDxt');
+
+export const SPL_ALT_ADDRESS = new PublicKey('Fg7pTjJNVavEw6VG1SVfFLg9WDEAgmvDGEBWvFNmgexF');

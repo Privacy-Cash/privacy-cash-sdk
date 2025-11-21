@@ -10,7 +10,7 @@ import { Utxo } from '../models/utxo.js';
 import * as borsh from 'borsh';
 import { sha256 } from '@ethersproject/sha2';
 import { PublicKey } from '@solana/web3.js';
-import { RELAYER_API_URL, PROGRAM_ID } from './constants.js';
+import { RELAYER_API_URL, PROGRAM_ID, SPL_PROGRAM_ID } from './constants.js';
 import { logger } from './logger.js';
 import { getConfig } from '../config.js';
 
@@ -145,6 +145,20 @@ export function findNullifierPDAs(proof: any) {
 
   return { nullifier0PDA, nullifier1PDA };
 }
+export function findNullifierPDAsSPL(proof: any) {
+  const [nullifier0PDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("nullifier"), Buffer.from(proof.inputNullifiers[0])],
+    SPL_PROGRAM_ID
+  );
+
+  const [nullifier1PDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("nullifier"), Buffer.from(proof.inputNullifiers[1])],
+    SPL_PROGRAM_ID
+  );
+
+  return { nullifier0PDA, nullifier1PDA };
+}
+
 
 // Find commitment PDAs for the given proof
 export function findCommitmentPDAs(proof: any) {
@@ -211,80 +225,6 @@ export function findCrossCheckNullifierPDAs(proof: any) {
 
   return { nullifier2PDA, nullifier3PDA };
 }
-
-export
-  function getExtDataHashForSpl(extData: {
-    recipient: string | PublicKey;
-    extAmount: string | number | BN;
-    encryptedOutput1?: string | Uint8Array;  // Optional for Account Data Separation
-    encryptedOutput2?: string | Uint8Array;  // Optional for Account Data Separation
-    fee: string | number | BN;
-    feeRecipient: string | PublicKey;
-    mintAddress: string | PublicKey;
-  }): Uint8Array {
-  // Convert all inputs to their appropriate types
-  const recipient = extData.recipient instanceof PublicKey
-    ? extData.recipient
-    : new PublicKey(extData.recipient);
-
-  const feeRecipient = extData.feeRecipient instanceof PublicKey
-    ? extData.feeRecipient
-    : new PublicKey(extData.feeRecipient);
-
-  const mintAddress = extData.mintAddress instanceof PublicKey
-    ? extData.mintAddress
-    : new PublicKey(extData.mintAddress);
-
-  // Convert to BN for proper i64/u64 handling
-  const extAmount = new BN(extData.extAmount.toString());
-  const fee = new BN(extData.fee.toString());
-
-  // Handle encrypted outputs - they might not be present in Account Data Separation approach
-  const encryptedOutput1 = extData.encryptedOutput1
-    ? Buffer.from(extData.encryptedOutput1 as any)
-    : Buffer.alloc(0); // Empty buffer if not provided
-  const encryptedOutput2 = extData.encryptedOutput2
-    ? Buffer.from(extData.encryptedOutput2 as any)
-    : Buffer.alloc(0); // Empty buffer if not provided
-
-  // For SPL tokens (not SOL), use only the first 16 bytes of the mint address
-  // SOL address is '11111111111111111111111111111112' which is handled specially
-  const mintAddressBytes = mintAddress.toBytes();
-  const solAddressBytes = new PublicKey('11111111111111111111111111111112').toBytes();
-  const mintAddressBytesForHash = mintAddressBytes.slice(0, 31);
-
-  // Define the borsh schema matching the Rust struct
-  const schema = {
-    struct: {
-      recipient: { array: { type: 'u8', len: 32 } },
-      extAmount: 'i64',
-      encryptedOutput1: { array: { type: 'u8' } },
-      encryptedOutput2: { array: { type: 'u8' } },
-      fee: 'u64',
-      feeRecipient: { array: { type: 'u8', len: 32 } },
-      mintAddress: { array: { type: 'u8' } },
-    }
-  };
-
-  const value = {
-    recipient: recipient.toBytes(),
-    extAmount: extAmount,  // BN instance - Borsh handles it correctly with i64 type
-    encryptedOutput1: encryptedOutput1,
-    encryptedOutput2: encryptedOutput2,
-    fee: fee,  // BN instance - Borsh handles it correctly with u64 type
-    feeRecipient: feeRecipient.toBytes(),
-    mintAddress: mintAddressBytesForHash,
-  };
-
-  // Serialize with Borsh
-  const serializedData = borsh.serialize(schema, value);
-
-  // Calculate the SHA-256 hash
-  const hashHex = sha256(serializedData);
-  // Convert from hex string to Uint8Array
-  return Buffer.from(hashHex.slice(2), 'hex');
-}
-
 
 export function getMintAddressField(mint: PublicKey): string {
   const mintStr = mint.toString();

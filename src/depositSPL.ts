@@ -1,14 +1,14 @@
 import { Connection, Keypair, PublicKey, TransactionInstruction, SystemProgram, ComputeBudgetProgram, VersionedTransaction, TransactionMessage, AddressLookupTableProgram } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Utxo } from './models/utxo.js';
-import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getExtDataHashForSpl, getMintAddressField } from './utils/utils.js';
+import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, getExtDataHashForSpl, getMintAddressField } from './utils/utilsSPL.js';
 import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.js';
 import * as hasher from '@lightprotocol/hasher.rs';
 import { MerkleTree } from './utils/merkle_tree.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS } from './utils/constants.js';
+import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, SPL_PROGRAM_ID, SPL_ALT_ADDRESS } from './utils/constants.js';
 import { getProtocolAddressesWithMint, useExistingALT } from './utils/address_lookup_table.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getMint, getAccount } from '@solana/spl-token';
@@ -358,9 +358,9 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     logger.info('generating ZK proof...');
 
-    // Generate the zero-knowledge proof
     const { proof, publicSignals } = await prove(input, keyBasePath);
-    // Parse the proof and public signals into byte arrays
+
+    logger.info('parse the proof');
     const proofInBytes = parseProofToBytesArray(proof);
     const inputsInBytes = parseToBytesArray(publicSignals);
 
@@ -384,18 +384,17 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     // Find PDAs for nullifiers and commitments
     const { nullifier0PDA, nullifier1PDA } = findNullifierPDAs(proofToSubmit);
-    const { nullifier2PDA, nullifier3PDA } = findCrossCheckNullifierPDAs(proofToSubmit);
 
     const [globalConfigPda, globalConfigPdaBump] = await PublicKey.findProgramAddressSync(
         [Buffer.from("global_config")],
-        PROGRAM_ID
+        SPL_PROGRAM_ID
     );
     const treeAta = getAssociatedTokenAddressSync(mintAddress, globalConfigPda, true);
 
-    const lookupTableAccount = await useExistingALT(connection, ALT_ADDRESS);
+    const lookupTableAccount = await useExistingALT(connection, SPL_ALT_ADDRESS);
 
     if (!lookupTableAccount?.value) {
-        throw new Error(`ALT not found at address ${ALT_ADDRESS.toString()} `);
+        throw new Error(`ALT not found at address ${SPL_ALT_ADDRESS.toString()} `);
     }
 
     // Serialize the proof and extData with SPL discriminator
@@ -408,34 +407,22 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             { pubkey: treeAccount, isSigner: false, isWritable: true },
             { pubkey: nullifier0PDA, isSigner: false, isWritable: true },
             { pubkey: nullifier1PDA, isSigner: false, isWritable: true },
-            { pubkey: nullifier2PDA, isSigner: false, isWritable: false },
-            { pubkey: nullifier3PDA, isSigner: false, isWritable: false },
-
             { pubkey: globalConfigAccount, isSigner: false, isWritable: false },
-            // signer
             { pubkey: publicKey, isSigner: true, isWritable: true },
-            // SPL token mint
-            { pubkey: mintAddress, isSigner: false, isWritable: false },
-            // signer's token account
-            { pubkey: signerTokenAccount, isSigner: false, isWritable: true },
-            // recipient (placeholder)
-            { pubkey: recipient, isSigner: false, isWritable: true },
-            // recipient's token account (placeholder)
-            { pubkey: recipient_ata, isSigner: false, isWritable: true },
-            // tree ATA
-            { pubkey: treeAta, isSigner: false, isWritable: true },
-            // fee recipient token account
-            { pubkey: feeRecipientTokenAccount, isSigner: false, isWritable: true },
 
-            // token program id
+            { pubkey: mintAddress, isSigner: false, isWritable: false },
+            { pubkey: signerTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: recipient, isSigner: false, isWritable: true },
+            { pubkey: recipient_ata, isSigner: false, isWritable: true },
+            { pubkey: treeAta, isSigner: false, isWritable: true },
+
+            { pubkey: feeRecipientTokenAccount, isSigner: false, isWritable: true },
             { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-            // ATA program
             { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-            // system protgram
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
 
         ],
-        programId: PROGRAM_ID,
+        programId: SPL_PROGRAM_ID,
         data: serializedProof,
     });
 

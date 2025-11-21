@@ -8,7 +8,7 @@ import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover
 
 import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
-import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
+import { fetchMerkleProof, findCommitmentPDAs, findNullifierPDAsSPL, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
 
 import { getUtxos, isUtxoSpent } from './getUtxos.js';
 import { logger } from './utils/logger.js';
@@ -276,7 +276,7 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     };
 
     // Find PDAs for nullifiers and commitments
-    const { nullifier0PDA, nullifier1PDA } = findNullifierPDAs(proofToSubmit);
+    const { nullifier0PDA, nullifier1PDA } = findNullifierPDAsSPL(proofToSubmit);
     const { nullifier2PDA, nullifier3PDA } = findCrossCheckNullifierPDAs(proofToSubmit);
     const { commitment0PDA, commitment1PDA } = findCommitmentPDAs(proofToSubmit);
 
