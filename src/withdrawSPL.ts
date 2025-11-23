@@ -8,7 +8,7 @@ import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover
 
 import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
-import { fetchMerkleProof, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getMintAddressField, getExtDataHashForSpl } from './utils/utils.js';
+import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getMintAddressField, getExtDataHash } from './utils/utils.js';
 
 import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
 import { logger } from './utils/logger.js';
@@ -102,7 +102,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     const { globalConfigAccount, treeTokenAccount } = getProgramAccounts()
 
     // Get current tree state
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
+    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState('usdc');
     logger.debug(`Using tree root: ${root}`);
     logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
 
@@ -260,7 +260,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         mintAddress: mintAddress.toString()
     };
     // Calculate the extDataHash with the encrypted outputs
-    const calculatedExtDataHash = getExtDataHashForSpl(extData);
+    const calculatedExtDataHash = getExtDataHash(extData);
 
     // Create the input for the proof generation
     const input = {
@@ -364,7 +364,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         console.log(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         console.log('Fetching updated tree state...');
-        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr)
+        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=usdc')
         let resJson = await res.json()
         console.log('resJson:', resJson)
         if (resJson.exists) {

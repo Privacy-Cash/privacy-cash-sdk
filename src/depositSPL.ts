@@ -1,7 +1,7 @@
 import { Connection, Keypair, PublicKey, TransactionInstruction, SystemProgram, ComputeBudgetProgram, VersionedTransaction, TransactionMessage, AddressLookupTableProgram } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Utxo } from './models/utxo.js';
-import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getExtDataHashForSpl, getMintAddressField } from './utils/utils.js';
+import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getExtDataHash, getMintAddressField } from './utils/utils.js';
 import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.js';
 import * as hasher from '@lightprotocol/hasher.rs';
 import { MerkleTree } from './utils/merkle_tree.js';
@@ -138,7 +138,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const tree = new MerkleTree(MERKLE_TREE_DEPTH, lightWasm);
 
     // Initialize root and nextIndex variables
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
+    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState('usdc');
 
     logger.debug(`Using tree root: ${root}`);
     logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
@@ -230,13 +230,13 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
         // Fetch Merkle proofs for real UTXOs
         const firstUtxoCommitment = await firstUtxo.getCommitment();
-        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment);
+        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment, 'usdc');
 
         let secondUtxoMerkleProof;
         if (secondUtxo.amount.gt(new BN(0))) {
             // Second UTXO is real, fetch its proof
             const secondUtxoCommitment = await secondUtxo.getCommitment();
-            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment);
+            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment, 'usdc');
             logger.debug('\nSecond UTXO to be consolidated:');
             await secondUtxo.log();
         }
@@ -337,7 +337,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         mintAddress: mintAddress.toString()
     };
     // Calculate the extDataHash with the encrypted outputs (now includes mintAddress for security)
-    const calculatedExtDataHash = getExtDataHashForSpl(extData);
+    const calculatedExtDataHash = getExtDataHash(extData);
 
     // Create the input for the proof generation (must match circuit input order exactly)
     const input = {
@@ -492,7 +492,8 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         logger.debug('Fetching updated tree state...');
-        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr)
+        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=usdc'
+        let res = await fetch(url)
         let resJson = await res.json()
         if (resJson.exists) {
             logger.debug(`Top up successfully in ${((Date.now() - start) / 1000).toFixed(2)} seconds!`);

@@ -84,7 +84,7 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
                     let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata))
                     let fetch_utxo_offset = offsetStr ? Number(offsetStr) : 0
                     let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
-                    let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
+                    let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=usdc&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
                     let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService, storage, publicKey_ata })
                     let am = 0
 
@@ -477,7 +477,7 @@ async function decrypt_outputs(
         let url = RELAYER_API_URL + `/utxos/indices`
         let res = await fetch(url, {
             method: 'POST', headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ encrypted_outputs })
+            body: JSON.stringify({ encrypted_outputs, token: 'usdc' })
         })
         let j = await res.json()
         if (!j.indices || !Array.isArray(j.indices) || j.indices.length != encrypted_outputs.length) {

@@ -115,12 +115,16 @@ export function getExtDataHash(extData: {
 
 
 // Function to fetch Merkle proof from API for a given commitment
-export async function fetchMerkleProof(commitment: string): Promise<{ pathElements: string[], pathIndices: number[] }> {
+export async function fetchMerkleProof(commitment: string, tokenName?: string): Promise<{ pathElements: string[], pathIndices: number[] }> {
   try {
     logger.debug(`Fetching Merkle proof for commitment: ${commitment}`);
-    const response = await fetch(`${RELAYER_API_URL}/merkle/proof/${commitment}`);
+    let url = `${RELAYER_API_URL}/merkle/proof/${commitment}`
+    if (tokenName) {
+      url += '?token=' + tokenName
+    }
+    const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`Failed to fetch Merkle proof: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch Merkle proof: ${url}`);
     }
     const data = await response.json() as { pathElements: string[], pathIndices: number[] };
     logger.debug(`✓ Fetched Merkle proof with ${data.pathElements.length} elements`);
@@ -147,10 +151,14 @@ export function findNullifierPDAs(proof: any) {
 }
 
 // Function to query remote tree state from indexer API
-export async function queryRemoteTreeState(): Promise<{ root: string, nextIndex: number }> {
+export async function queryRemoteTreeState(tokenName?: string): Promise<{ root: string, nextIndex: number }> {
   try {
     logger.debug('Fetching Merkle root and nextIndex from API...');
-    const response = await fetch(`${RELAYER_API_URL}/merkle/root`);
+    let url = `${RELAYER_API_URL}/merkle/root`
+    if (tokenName) {
+      url += '?token=' + tokenName
+    }
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch Merkle root and nextIndex: ${response.status} ${response.statusText}`);
     }
@@ -197,80 +205,6 @@ export function findCrossCheckNullifierPDAs(proof: any) {
 
   return { nullifier2PDA, nullifier3PDA };
 }
-
-export
-  function getExtDataHashForSpl(extData: {
-    recipient: string | PublicKey;
-    extAmount: string | number | BN;
-    encryptedOutput1?: string | Uint8Array;  // Optional for Account Data Separation
-    encryptedOutput2?: string | Uint8Array;  // Optional for Account Data Separation
-    fee: string | number | BN;
-    feeRecipient: string | PublicKey;
-    mintAddress: string | PublicKey;
-  }): Uint8Array {
-  // Convert all inputs to their appropriate types
-  const recipient = extData.recipient instanceof PublicKey
-    ? extData.recipient
-    : new PublicKey(extData.recipient);
-
-  const feeRecipient = extData.feeRecipient instanceof PublicKey
-    ? extData.feeRecipient
-    : new PublicKey(extData.feeRecipient);
-
-  const mintAddress = extData.mintAddress instanceof PublicKey
-    ? extData.mintAddress
-    : new PublicKey(extData.mintAddress);
-
-  // Convert to BN for proper i64/u64 handling
-  const extAmount = new BN(extData.extAmount.toString());
-  const fee = new BN(extData.fee.toString());
-
-  // Handle encrypted outputs - they might not be present in Account Data Separation approach
-  const encryptedOutput1 = extData.encryptedOutput1
-    ? Buffer.from(extData.encryptedOutput1 as any)
-    : Buffer.alloc(0); // Empty buffer if not provided
-  const encryptedOutput2 = extData.encryptedOutput2
-    ? Buffer.from(extData.encryptedOutput2 as any)
-    : Buffer.alloc(0); // Empty buffer if not provided
-
-  // For SPL tokens (not SOL), use only the first 16 bytes of the mint address
-  // SOL address is '11111111111111111111111111111112' which is handled specially
-  const mintAddressBytes = mintAddress.toBytes();
-  const solAddressBytes = new PublicKey('11111111111111111111111111111112').toBytes();
-  const mintAddressBytesForHash = mintAddressBytes.slice(0, 31);
-
-  // Define the borsh schema matching the Rust struct
-  const schema = {
-    struct: {
-      recipient: { array: { type: 'u8', len: 32 } },
-      extAmount: 'i64',
-      encryptedOutput1: { array: { type: 'u8' } },
-      encryptedOutput2: { array: { type: 'u8' } },
-      fee: 'u64',
-      feeRecipient: { array: { type: 'u8', len: 32 } },
-      mintAddress: { array: { type: 'u8' } },
-    }
-  };
-
-  const value = {
-    recipient: recipient.toBytes(),
-    extAmount: extAmount,  // BN instance - Borsh handles it correctly with i64 type
-    encryptedOutput1: encryptedOutput1,
-    encryptedOutput2: encryptedOutput2,
-    fee: fee,  // BN instance - Borsh handles it correctly with u64 type
-    feeRecipient: feeRecipient.toBytes(),
-    mintAddress: mintAddressBytesForHash,
-  };
-
-  // Serialize with Borsh
-  const serializedData = borsh.serialize(schema, value);
-
-  // Calculate the SHA-256 hash
-  const hashHex = sha256(serializedData);
-  // Convert from hex string to Uint8Array
-  return Buffer.from(hashHex.slice(2), 'hex');
-}
-
 
 export function getMintAddressField(mint: PublicKey): string {
   const mintStr = mint.toString();
