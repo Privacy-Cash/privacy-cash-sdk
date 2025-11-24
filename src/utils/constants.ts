@@ -18,7 +18,7 @@ export const TRANSACT_SPL_IX_DISCRIMINATOR = Buffer.from([154, 66, 244, 204, 78,
 
 export const MERKLE_TREE_DEPTH = 26;
 
-export const ALT_ADDRESS = new PublicKey('GqCvovgN5gCAmanjoehMK1L32PiKcaumoi7VLG4ArqpK');
+export const ALT_ADDRESS = new PublicKey('6TufVuUYc2SqVLpR5YDLzWAogicpoS4mWShgPP7HXunm');
 
 export const RELAYER_API_URL = process.env.NEXT_PUBLIC_RELAYER_API_URL ?? 'https://staging.privacycash.org';
 
