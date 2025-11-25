@@ -55,95 +55,94 @@ let decryptionTaskFinished = 0;
  * @returns Array of decrypted UTXOs that belong to the user
  */
 
-export async function getUtxosSPL({ publicKey, connection, encryptionService, storage, mintAddress }: {
+export async function getUtxosSPL({ publicKey, connection, encryptionService, storage, mintAddress, abortSignal }: {
     publicKey: PublicKey,
     connection: Connection,
     encryptionService: EncryptionService,
     storage: Storage,
-    mintAddress: PublicKey
+    mintAddress: PublicKey,
+    abortSignal?: AbortSignal
 }): Promise<Utxo[]> {
-    if (!getMyUtxosPromise) {
-        getMyUtxosPromise = (async () => {
-            let valid_utxos: Utxo[] = []
-            let valid_strings: string[] = []
-            let history_indexes: number[] = []
-            let publicKey_ata: PublicKey
-            try {
-                publicKey_ata = await getAssociatedTokenAddress(
-                    mintAddress,
-                    publicKey
-                );
-                let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata))
-                if (offsetStr) {
-                    roundStartIndex = Number(offsetStr)
-                } else {
-                    roundStartIndex = 0
-                }
-                decryptionTaskFinished = 0
-                while (true) {
-                    let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata))
-                    let fetch_utxo_offset = offsetStr ? Number(offsetStr) : 0
-                    let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
-                    let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=usdc&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
-                    let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService, storage, publicKey_ata })
-                    let am = 0
+    let valid_utxos: Utxo[] = []
+    let valid_strings: string[] = []
+    let history_indexes: number[] = []
+    let publicKey_ata: PublicKey
+    try {
+        publicKey_ata = await getAssociatedTokenAddress(
+            mintAddress,
+            publicKey
+        );
+        let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata))
+        if (offsetStr) {
+            roundStartIndex = Number(offsetStr)
+        } else {
+            roundStartIndex = 0
+        }
+        decryptionTaskFinished = 0
+        while (true) {
+            if (abortSignal?.aborted) {
+                throw new Error('aborted')
+            }
+            let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata))
+            let fetch_utxo_offset = offsetStr ? Number(offsetStr) : 0
+            let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
+            let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=usdc&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
+            let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService, storage, publicKey_ata })
+            let am = 0
 
-                    const nonZeroUtxos: Utxo[] = [];
-                    const nonZeroEncrypted: any[] = [];
-                    for (let [k, utxo] of fetched.utxos.entries()) {
-                        history_indexes.push(utxo.index)
-                        if (utxo.amount.toNumber() > 0) {
-                            nonZeroUtxos.push(utxo);
-                            nonZeroEncrypted.push(fetched.encryptedOutputs[k]);
-                        }
-                    }
-                    if (nonZeroUtxos.length > 0) {
-                        const spentFlags = await areUtxosSpent(connection, nonZeroUtxos);
-                        for (let i = 0; i < nonZeroUtxos.length; i++) {
-                            if (!spentFlags[i]) {
-                                logger.debug(`found unspent encrypted_output ${nonZeroEncrypted[i]}`)
-                                am += nonZeroUtxos[i].amount.toNumber();
-                                valid_utxos.push(nonZeroUtxos[i]);
-                                valid_strings.push(nonZeroEncrypted[i]);
-                            }
-                        }
-                    }
-                    storage.setItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata), (fetch_utxo_offset + fetched.len).toString())
-                    if (!fetched.hasMore) {
-                        break
-                    }
-                    await sleep(100)
+            const nonZeroUtxos: Utxo[] = [];
+            const nonZeroEncrypted: any[] = [];
+            for (let [k, utxo] of fetched.utxos.entries()) {
+                history_indexes.push(utxo.index)
+                if (utxo.amount.toNumber() > 0) {
+                    nonZeroUtxos.push(utxo);
+                    nonZeroEncrypted.push(fetched.encryptedOutputs[k]);
                 }
-            } catch (e: any) {
-                throw e
-            } finally {
-                getMyUtxosPromise = null
             }
-            // get history index
-            let historyKey = 'tradeHistory' + localstorageKey(publicKey_ata)
-            let rec = storage.getItem(historyKey)
-            let recIndexes: number[] = []
-            if (rec?.length) {
-                recIndexes = rec.split(',').map(n => Number(n))
+            if (nonZeroUtxos.length > 0) {
+                const spentFlags = await areUtxosSpent(connection, nonZeroUtxos);
+                for (let i = 0; i < nonZeroUtxos.length; i++) {
+                    if (!spentFlags[i]) {
+                        logger.debug(`found unspent encrypted_output ${nonZeroEncrypted[i]}`)
+                        am += nonZeroUtxos[i].amount.toNumber();
+                        valid_utxos.push(nonZeroUtxos[i]);
+                        valid_strings.push(nonZeroEncrypted[i]);
+                    }
+                }
             }
-            if (recIndexes.length) {
-                history_indexes = [...history_indexes, ...recIndexes]
+            storage.setItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata), (fetch_utxo_offset + fetched.len).toString())
+            if (!fetched.hasMore) {
+                break
             }
-            let unique_history_indexes = Array.from(new Set(history_indexes));
-            let top20 = unique_history_indexes.sort((a, b) => b - a).slice(0, 20);
-            if (top20.length) {
-                storage.setItem(historyKey, top20.join(','))
-            }
-            // store valid strings
-            logger.debug(`valid_strings len before set: ${valid_strings.length}`)
-            valid_strings = [...new Set(valid_strings)];
-            logger.debug(`valid_strings len after set: ${valid_strings.length}`)
-            storage.setItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey_ata), JSON.stringify(valid_strings))
-            // reorgnize
-            return valid_utxos.filter(u => u.mintAddress == mintAddress.toString())
-        })()
+            await sleep(100)
+        }
+    } catch (e: any) {
+        throw e
+    } finally {
+        getMyUtxosPromise = null
     }
-    return getMyUtxosPromise
+    // get history index
+    let historyKey = 'tradeHistory' + localstorageKey(publicKey_ata)
+    let rec = storage.getItem(historyKey)
+    let recIndexes: number[] = []
+    if (rec?.length) {
+        recIndexes = rec.split(',').map(n => Number(n))
+    }
+    if (recIndexes.length) {
+        history_indexes = [...history_indexes, ...recIndexes]
+    }
+    let unique_history_indexes = Array.from(new Set(history_indexes));
+    let top20 = unique_history_indexes.sort((a, b) => b - a).slice(0, 20);
+    if (top20.length) {
+        storage.setItem(historyKey, top20.join(','))
+    }
+    // store valid strings
+    logger.debug(`valid_strings len before set: ${valid_strings.length}`)
+    valid_strings = [...new Set(valid_strings)];
+    logger.debug(`valid_strings len after set: ${valid_strings.length}`)
+    storage.setItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey_ata), JSON.stringify(valid_strings))
+    // reorgnize
+    return valid_utxos.filter(u => u.mintAddress == mintAddress.toString())
 }
 
 async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionService, publicKey_ata }: {
@@ -336,7 +335,7 @@ async function areUtxosSpent(
 }
 
 // Calculate total balance
-export function getBalanceFromUtxos(utxos: Utxo[]): {
+export function getBalanceFromUtxosSPL(utxos: Utxo[]): {
     base_units: number
     /** @deprecated use base_units instead */
     lamports: number

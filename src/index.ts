@@ -1,7 +1,7 @@
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import { deposit } from './deposit.js';
 import { getBalanceFromUtxos, getUtxos, localstorageKey } from './getUtxos.js';
-import { getBalanceFromUtxos as getBalanceFromUtxosSPL, getUtxosSPL } from './getUtxosSPL.js';
+import { getBalanceFromUtxosSPL, getUtxosSPL } from './getUtxosSPL.js';
 
 import { LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, USDC_MINT } from './utils/constants.js';
 import { logger, type LoggerFn, setLogger } from './utils/logger.js';
@@ -63,22 +63,21 @@ export class PrivacyCash {
      * 
      * This method clears the cache of utxos.
      */
-    async clearCache(mintAddresses?: PublicKey[]) {
+    async clearCache() {
         if (!this.publicKey) {
             return this
         }
         storage.removeItem(LSK_FETCH_OFFSET + localstorageKey(this.publicKey))
         storage.removeItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(this.publicKey))
         // spl
-        if (mintAddresses) {
-            for (let mintAddress of mintAddresses) {
-                let ata = await getAssociatedTokenAddress(
-                    mintAddress,
-                    this.publicKey
-                );
-                storage.removeItem(LSK_FETCH_OFFSET + localstorageKey(ata))
-                storage.removeItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(ata))
-            }
+        let mintAddresses = [USDC_MINT]
+        for (let mintAddress of mintAddresses) {
+            let ata = await getAssociatedTokenAddress(
+                mintAddress,
+                this.publicKey
+            );
+            storage.removeItem(LSK_FETCH_OFFSET + localstorageKey(ata))
+            storage.removeItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(ata))
         }
         return this
     }
@@ -198,10 +197,10 @@ export class PrivacyCash {
     /**
      * Returns the amount of lamports current wallet has in Privacy Cash.
      */
-    async getPrivateBalance() {
+    async getPrivateBalance(abortSignal?: AbortSignal) {
         logger.info('getting private balance')
         this.isRuning = true
-        let utxos = await getUtxos({ publicKey: this.publicKey, connection: this.connection, encryptionService: this.encryptionService, storage })
+        let utxos = await getUtxos({ publicKey: this.publicKey, connection: this.connection, encryptionService: this.encryptionService, storage, abortSignal })
         this.isRuning = false
         return getBalanceFromUtxos(utxos)
     }
