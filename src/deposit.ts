@@ -462,11 +462,6 @@ async function checkDepositLimit(connection: Connection) {
         const maxDepositAmount = new BN(accountInfo.data.slice(4120, 4128), 'le');
         const bump = accountInfo.data[4128];
 
-        console.log('\n📋 MerkleTreeAccount Details:');
-        console.log(`┌─ Authority: ${authority.toString()}`);
-        console.log(`├─ Next Index: ${nextIndex.toString()}`);
-        console.log(`├─ Root Index: ${rootIndex.toString()}`);
-        console.log(`├─ Max Deposit Amount: ${maxDepositAmount.toString()} lamports`);
 
         // Convert to SOL using BN division to handle large numbers
         const lamportsPerSol = new BN(1_000_000_000);
@@ -482,7 +477,6 @@ async function checkDepositLimit(connection: Connection) {
             const fractional = remainder.toNumber() / 1e9;
             solFormatted = `${maxDepositSol.toString()}${fractional.toFixed(9).substring(1)}`;
         }
-        console.log('solFormatted', solFormatted)
         return Number(solFormatted)
 
     } catch (error) {

@@ -94,6 +94,19 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         publicKey
     );
 
+    // Derive tree account PDA with mint address for SPL (different from SOL version)
+    const [treeAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from('merkle_tree'), mintAddress.toBuffer()],
+        PROGRAM_ID
+    );
+
+    let limitAmount = await checkDepositLimit(connection, treeAccount)
+    if (limitAmount && base_units > limitAmount * 1e6) {
+        throw new Error(`Don't deposit more than ${limitAmount} USDC`)
+    }
+
+
+
     // check limit
     // let limitAmount = await checkDepositLimit(connection)
     // if (limitAmount && base_units > limitAmount * units_per_token) {
@@ -125,12 +138,6 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     if (solBalance / 1e9 < 0.01) {
         throw new Error(`Need at least 0.01 SOL for Solana fees.`);
     }
-
-    // Derive tree account PDA with mint address for SPL (different from SOL version)
-    const [treeAccount] = PublicKey.findProgramAddressSync(
-        [Buffer.from('merkle_tree'), mintAddress.toBuffer()],
-        PROGRAM_ID
-    );
 
     const { globalConfigAccount } = getProgramAccounts()
 
@@ -505,4 +512,44 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         retryTimes++
     }
 
+}
+
+
+async function checkDepositLimit(connection: Connection, treeAccount: PublicKey) {
+    try {
+
+        // Fetch the account data
+        const accountInfo = await connection.getAccountInfo(treeAccount);
+
+        if (!accountInfo) {
+            console.error('❌ Tree account not found. Make sure the program is initialized.');
+            return;
+        }
+
+        const authority = new PublicKey(accountInfo.data.slice(8, 40));
+        const nextIndex = new BN(accountInfo.data.slice(40, 48), 'le');
+        const rootIndex = new BN(accountInfo.data.slice(4112, 4120), 'le');
+        const maxDepositAmount = new BN(accountInfo.data.slice(4120, 4128), 'le');
+        const bump = accountInfo.data[4128];
+
+        // Convert to SOL using BN division to handle large numbers
+        const lamportsPerSol = new BN(1e6);
+        const maxDepositSol = maxDepositAmount.div(lamportsPerSol);
+        const remainder = maxDepositAmount.mod(lamportsPerSol);
+
+        // Format the SOL amount with decimals
+        let solFormatted = '1';
+        if (remainder.eq(new BN(0))) {
+            solFormatted = maxDepositSol.toString();
+        } else {
+            // Handle fractional SOL by converting remainder to decimal
+            const fractional = remainder.toNumber() / 1e6;
+            solFormatted = `${maxDepositSol.toString()}${fractional.toFixed(9).substring(1)}`;
+        }
+        return Number(solFormatted)
+
+    } catch (error) {
+        console.log('❌ Error reading deposit limit:', error);
+        throw error
+    }
 }
