@@ -23,7 +23,14 @@ type WtnsModule = {
 }
 
 type Groth16Module = {
-  fullProve: (input: any, wasmFile: string, zkeyFile: string) => Promise<{ proof: Proof; publicSignals: string[] }>
+  fullProve: (
+    input: any,
+    wasmFile: string,
+    zkeyFile: string,
+    logger?: any,
+    wtnsCalcOptions?: { singleThread?: boolean },
+    proverOptions?: { singleThread?: boolean }
+  ) => Promise<{ proof: Proof; publicSignals: string[] }>
   verify: (vkeyData: any, publicSignals: any, proof: Proof) => Promise<boolean>
 }
 
@@ -53,21 +60,47 @@ interface ProofResult {
 
 /**
  * Generates a ZK proof using snarkjs and formats it for use on-chain
- * 
+ *
  * @param input The circuit inputs to generate a proof for
  * @param keyBasePath The base path for the circuit keys (.wasm and .zkey files)
+ * @param options Optional proof generation options (e.g., singleThread for Deno/Bun)
  * @returns A proof object with formatted proof elements and public signals
  */
-async function prove(input: any, keyBasePath: string): Promise<{
+async function prove(input: any, keyBasePath: string, options?: { singleThread?: boolean }): Promise<{
   proof: Proof
   publicSignals: string[];
 }> {
+  // Detect if we should use single-threaded mode (for Deno/Bun compatibility)
+  const useSingleThread = options?.singleThread ?? shouldUseSingleThread();
 
+  // Single-thread options need to be passed to BOTH witness calculation AND proving
+  const singleThreadOpts = useSingleThread ? { singleThread: true } : undefined;
+
+  // Call fullProve with all parameters:
+  // 1. input, 2. wasmFile, 3. zkeyFile, 4. logger, 5. wtnsCalcOptions, 6. proverOptions
   return await groth16Typed.fullProve(
     utilsTyped.stringifyBigInts(input),
     `${keyBasePath}.wasm`,
     `${keyBasePath}.zkey`,
+    undefined, // logger parameter
+    singleThreadOpts, // wtnsCalcOptions (5th param) - for witness calculation
+    singleThreadOpts  // proverOptions (6th param) - for proving
   )
+}
+
+/**
+ * Detect if single-threaded mode should be used
+ */
+function shouldUseSingleThread(): boolean {
+  // @ts-ignore - Deno global
+  if (typeof Deno !== 'undefined') {
+    return true; // Deno has worker issues
+  }
+  // @ts-ignore - Bun global
+  if (typeof Bun !== 'undefined') {
+    return true; // Bun may have worker issues
+  }
+  return false;
 }
 
 export function parseProofToBytesArray(
