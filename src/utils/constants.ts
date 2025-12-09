@@ -20,7 +20,7 @@ export const MERKLE_TREE_DEPTH = 26;
 
 export const ALT_ADDRESS = new PublicKey('HEN49U2ySJ85Vc78qprSW9y6mFDhs1NczRxyppNHjofe');
 
-export const RELAYER_API_URL = process.env.NEXT_PUBLIC_RELAYER_API_URL ?? 'https://staging.privacycash.org';
+export const RELAYER_API_URL = process.env.NEXT_PUBLIC_RELAYER_API_URL ?? 'https://api3.privacycash.org';
 
 export const SIGN_MESSAGE = `Privacy Money account sign in`
 
