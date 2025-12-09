@@ -120,7 +120,7 @@ export class PrivacyCash {
         logger.info('start depositting')
         let lightWasm = await WasmFactory.getInstance()
         let res = await depositSPL({
-            mintAddress: new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'),
+            mintAddress: USDC_MINT,
             lightWasm,
             base_units: base_units,
             connection: this.connection,
