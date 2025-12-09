@@ -42,7 +42,8 @@ async function main() {
 
     // withdraw USDC
     let withdrawUSDCRes = await client.withdrawUSDC({
-        base_units: 2 * 1e6
+        base_units: 2 * 1e6,
+        recipientAddress: '[RECIPIENT_ADDRESS]'
     })
     console.log(withdrawUSDCRes)
     console.log('USDC balance after withdraw:', usdcBalance, usdcBalance.base_units / 1e6)
