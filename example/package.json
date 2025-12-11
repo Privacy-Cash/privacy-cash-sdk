@@ -1,6 +1,6 @@
 {
   "name": "privacycash-sdk-example",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,6 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "privacycash": "^1.0.16"
+    "privacycash": "^1.0.18"
   }
 }

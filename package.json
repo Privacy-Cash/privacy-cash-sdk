@@ -1,6 +1,6 @@
 {
   "name": "privacycash",
-  "version": "1.0.16",
+  "version": "1.0.18",
   "description": "",
   "main": "dist/index.js",
   "repository": "https://github.com/Privacy-Cash/privacy-cash-sdk",
@@ -12,8 +12,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run --exclude \"**/__tests__/e2e.test.ts\"",
-    "teste2e": "vitest run e2e.test.ts"
+    "test": "vitest run --exclude \"**/__tests__/e2e.test.ts,**/__tests__/e2espl.test.ts\"",
+    "teste2e": "vitest run e2e.test.ts",
+    "teste2espl": "vitest run e2espl.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +24,7 @@
     "@ethersproject/keccak256": "^5.8.0",
     "@ethersproject/sha2": "^5.8.0",
     "@lightprotocol/hasher.rs": "^0.2.1",
+    "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "@types/bn.js": "^5.2.0",
     "@types/snarkjs": "^0.7.9",

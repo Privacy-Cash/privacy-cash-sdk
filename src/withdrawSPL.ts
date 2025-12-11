@@ -1,4 +1,4 @@
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Buffer } from 'buffer';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
@@ -8,11 +8,12 @@ import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover
 
 import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
-import { fetchMerkleProof, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
+import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getMintAddressField, getExtDataHash } from './utils/utils.js';
 
-import { getUtxos } from './getUtxos.js';
+import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
 import { logger } from './utils/logger.js';
 import { getConfig } from './config.js';
+import { getAssociatedTokenAddressSync, getMint } from '@solana/spl-token';
 // Indexer API endpoint
 
 
@@ -20,7 +21,7 @@ import { getConfig } from './config.js';
 async function submitWithdrawToIndexer(params: any): Promise<string> {
     try {
 
-        const response = await fetch(`${RELAYER_API_URL}/withdraw`, {
+        const response = await fetch(`${RELAYER_API_URL}/withdraw/spl`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -47,27 +48,61 @@ async function submitWithdrawToIndexer(params: any): Promise<string> {
 type WithdrawParams = {
     publicKey: PublicKey,
     connection: Connection,
-    amount_in_lamports: number,
+    base_units: number,
     keyBasePath: string,
     encryptionService: EncryptionService,
     lightWasm: hasher.LightWasm,
     recipient: PublicKey,
+    mintAddress: PublicKey,
     storage: Storage
 }
 
-export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath }: WithdrawParams) {
-    let fee_in_lamports = amount_in_lamports * (await getConfig('withdraw_fee_rate')) + LAMPORTS_PER_SOL * (await getConfig('withdraw_rent_fee'))
-    amount_in_lamports -= fee_in_lamports
+export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, encryptionService, keyBasePath, mintAddress }: WithdrawParams) {
+    let mintInfo = await getMint(connection, mintAddress)
+    let units_per_token = 10 ** mintInfo.decimals
+
+    let withdraw_fee_rate = await getConfig('withdraw_fee_rate')
+    let withdraw_rent_fee = await getConfig('usdc_withdraw_rent_fee')
+
+    let fee_base_units = Math.floor(base_units * withdraw_fee_rate + units_per_token * withdraw_rent_fee)
+    base_units -= fee_base_units
+
+    if (base_units <= 0) {
+        throw new Error('withdraw amount too low')
+    }
     let isPartial = false
+
+    let recipient_ata = getAssociatedTokenAddressSync(
+        mintAddress,
+        recipient,
+        true
+    );
+
+    let feeRecipientTokenAccount = getAssociatedTokenAddressSync(
+        mintAddress,
+        FEE_RECIPIENT,
+        true
+    );
+    let signerTokenAccount = getAssociatedTokenAddressSync(
+        mintAddress,
+        publicKey
+    );
+
 
     logger.debug('Encryption key generated from user keypair');
 
     logger.debug(`Deployer wallet: ${DEPLOYER_ID.toString()}`);
 
-    const { treeAccount, treeTokenAccount, globalConfigAccount } = getProgramAccounts()
+    // Derive tree account PDA with mint address for SPL (different from SOL version)
+    const [treeAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from('merkle_tree'), mintAddress.toBuffer()],
+        PROGRAM_ID
+    );
+
+    const { globalConfigAccount, treeTokenAccount } = getProgramAccounts()
 
     // Get current tree state
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
+    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState('usdc');
     logger.debug(`Using tree root: ${root}`);
     logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
 
@@ -84,26 +119,28 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const unspentUtxos = await getUtxos({ connection, publicKey, encryptionService, storage });
-    logger.debug(`Found ${unspentUtxos.length} total UTXOs`);
+    const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, mintAddress });
+
+    logger.debug(`Found ${mintUtxos.length} total UTXOs`);
 
     // Calculate and log total unspent UTXO balance
-    const totalUnspentBalance = unspentUtxos.reduce((sum, utxo) => sum.add(utxo.amount), new BN(0));
+    const totalUnspentBalance = mintUtxos.reduce((sum, utxo) => sum.add(utxo.amount), new BN(0));
     logger.debug(`Total unspent UTXO balance before: ${totalUnspentBalance.toString()} lamports (${totalUnspentBalance.toNumber() / 1e9} SOL)`);
 
-    if (unspentUtxos.length < 1) {
+    if (mintUtxos.length < 1) {
         throw new Error('Need at least 1 unspent UTXO to perform a withdrawal');
     }
 
     // Sort UTXOs by amount in descending order to use the largest ones first
-    unspentUtxos.sort((a, b) => b.amount.cmp(a.amount));
+    mintUtxos.sort((a, b) => b.amount.cmp(a.amount));
 
     // Use the largest UTXO as first input, and either second largest UTXO or dummy UTXO as second input
-    const firstInput = unspentUtxos[0];
-    const secondInput = unspentUtxos.length > 1 ? unspentUtxos[1] : new Utxo({
+    const firstInput = mintUtxos[0];
+    const secondInput = mintUtxos.length > 1 ? mintUtxos[1] : new Utxo({
         lightWasm,
         keypair: utxoKeypair,
-        amount: '0'
+        amount: '0',
+        mintAddress: mintAddress.toString()
     });
 
     const inputs = [firstInput, secondInput];
@@ -114,15 +151,15 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     if (totalInputAmount.toNumber() === 0) {
         throw new Error('no balance')
     }
-    if (totalInputAmount.lt(new BN(amount_in_lamports + fee_in_lamports))) {
+    if (totalInputAmount.lt(new BN(base_units + fee_base_units))) {
         isPartial = true
-        amount_in_lamports = totalInputAmount.toNumber()
-        amount_in_lamports -= fee_in_lamports
+        base_units = totalInputAmount.toNumber()
+        base_units -= fee_base_units
     }
 
     // Calculate the change amount (what's left after withdrawal and fee)
-    const changeAmount = totalInputAmount.sub(new BN(amount_in_lamports)).sub(new BN(fee_in_lamports));
-    logger.debug(`Withdrawing ${amount_in_lamports} lamports with ${fee_in_lamports} fee, ${changeAmount.toString()} as change`);
+    const changeAmount = totalInputAmount.sub(new BN(base_units)).sub(new BN(fee_base_units));
+    logger.debug(`Withdrawing ${base_units} lamports with ${fee_base_units} fee, ${changeAmount.toString()} as change`);
 
     // Get Merkle proofs for both input UTXOs
     const inputMerkleProofs = await Promise.all(
@@ -136,7 +173,7 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
             }
             // For real UTXOs, fetch the proof from API
             const commitment = await utxo.getCommitment();
-            return fetchMerkleProof(commitment);
+            return fetchMerkleProof(commitment, 'usdc');
         })
     );
 
@@ -150,20 +187,22 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
             lightWasm,
             amount: changeAmount.toString(),
             keypair: utxoKeypairV2,
-            index: currentNextIndex
+            index: currentNextIndex,
+            mintAddress: mintAddress.toString()
         }), // Change output
         new Utxo({
             lightWasm,
             amount: '0',
             keypair: utxoKeypairV2,
-            index: currentNextIndex + 1
+            index: currentNextIndex + 1,
+            mintAddress: mintAddress.toString()
         }) // Empty UTXO
     ];
 
     // For withdrawals, extAmount is negative (funds leaving the system)
-    const extAmount = -amount_in_lamports;
-    const publicAmountForCircuit = new BN(extAmount).sub(new BN(fee_in_lamports)).add(FIELD_SIZE).mod(FIELD_SIZE);
-    logger.debug(`Public amount calculation: (${extAmount} - ${fee_in_lamports} + FIELD_SIZE) % FIELD_SIZE = ${publicAmountForCircuit.toString()}`);
+    const extAmount = -base_units;
+    const publicAmountForCircuit = new BN(extAmount).sub(new BN(fee_base_units)).add(FIELD_SIZE).mod(FIELD_SIZE);
+    logger.debug(`Public amount calculation: (${extAmount} - ${fee_base_units} + FIELD_SIZE) % FIELD_SIZE = ${publicAmountForCircuit.toString()}`);
 
     // Verify this matches the circuit balance equation: sumIns + publicAmount = sumOuts
     const sumIns = inputs.reduce((sum, input) => sum.add(input.amount), new BN(0));
@@ -212,15 +251,14 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     // Create the withdrawal ExtData with real encrypted outputs
     const extData = {
         // it can be any address
-        recipient,
+        recipient: recipient_ata,
         extAmount: new BN(extAmount),
         encryptedOutput1: encryptedOutput1,
         encryptedOutput2: encryptedOutput2,
-        fee: new BN(fee_in_lamports),
-        feeRecipient: FEE_RECIPIENT,
-        mintAddress: inputs[0].mintAddress
+        fee: new BN(fee_base_units),
+        feeRecipient: feeRecipientTokenAccount,
+        mintAddress: mintAddress.toString()
     };
-
     // Calculate the extDataHash with the encrypted outputs
     const calculatedExtDataHash = getExtDataHash(extData);
 
@@ -228,26 +266,25 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     const input = {
         // Common transaction data
         root: root,
-        inputNullifier: inputNullifiers,
-        outputCommitment: outputCommitments,
-        publicAmount: publicAmountForCircuit.toString(),
+        mintAddress: getMintAddressField(mintAddress),// new mint address
+        publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
         extDataHash: calculatedExtDataHash,
 
-        // Input UTXO data (UTXOs being spent)
+        // Input UTXO data (UTXOs being spent) - ensure all values are in decimal format
         inAmount: inputs.map(x => x.amount.toString(10)),
         inPrivateKey: inputs.map(x => x.keypair.privkey),
         inBlinding: inputs.map(x => x.blinding.toString(10)),
         inPathIndices: inputMerklePathIndices,
         inPathElements: inputMerklePathElements,
+        inputNullifier: inputNullifiers, // Use resolved values instead of Promise objects
 
-        // Output UTXO data (UTXOs being created)
+        // Output UTXO data (UTXOs being created) - ensure all values are in decimal format
         outAmount: outputs.map(x => x.amount.toString(10)),
         outBlinding: outputs.map(x => x.blinding.toString(10)),
         outPubkey: outputs.map(x => x.keypair.pubkey),
-
-        // new mint address
-        mintAddress: inputs[0].mintAddress
+        outputCommitment: outputCommitments,
     };
+
     logger.info('generating ZK proof...')
 
     // Generate the zero-knowledge proof
@@ -280,8 +317,14 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     const { nullifier2PDA, nullifier3PDA } = findCrossCheckNullifierPDAs(proofToSubmit);
 
     // Serialize the proof and extData
-    const serializedProof = serializeProofAndExtData(proofToSubmit, extData);
+    const serializedProof = serializeProofAndExtData(proofToSubmit, extData, true);
     logger.debug(`Total instruction data size: ${serializedProof.length} bytes`);
+
+    const [globalConfigPda, globalConfigPdaBump] = await PublicKey.findProgramAddressSync(
+        [Buffer.from("global_config")],
+        PROGRAM_ID
+    );
+    const treeAta = getAssociatedTokenAddressSync(mintAddress, globalConfigPda, true);
 
     // Prepare withdraw parameters for indexer backend
     const withdrawParams = {
@@ -296,11 +339,13 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         recipient: recipient.toString(),
         feeRecipientAccount: FEE_RECIPIENT.toString(),
         extAmount: extAmount,
-        encryptedOutput1: encryptedOutput1.toString('base64'),
-        encryptedOutput2: encryptedOutput2.toString('base64'),
-        fee: fee_in_lamports,
+        fee: fee_base_units,
         lookupTableAddress: ALT_ADDRESS.toString(),
-        senderAddress: publicKey.toString()
+        senderAddress: publicKey.toString(),
+        treeAta: treeAta.toString(),
+        recipientAta: recipient_ata.toString(),
+        mintAddress: mintAddress.toString(),
+        feeRecipientTokenAccount: feeRecipientTokenAccount.toString()
     };
 
 
@@ -319,11 +364,11 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         console.log(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         console.log('Fetching updated tree state...');
-        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr)
+        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=usdc')
         let resJson = await res.json()
         console.log('resJson:', resJson)
         if (resJson.exists) {
-            return { isPartial, tx: signature, recipient: recipient.toString(), amount_in_lamports, fee_in_lamports }
+            return { isPartial, tx: signature, recipient: recipient.toString(), base_units, fee_base_units }
         }
         if (retryTimes >= 10) {
             throw new Error('Refresh the page to see latest balance.')

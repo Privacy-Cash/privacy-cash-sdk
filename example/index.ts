@@ -29,6 +29,25 @@ async function main() {
     balance = await client.getPrivateBalance()
     console.log('balance after withdraw:', balance, balance.lamports / 1_000_000_000)
 
+    // get USDC balance
+    let usdcBalance = await client.getPrivateBalanceUSDC()
+    console.log('USDC balance:', usdcBalance, usdcBalance.base_units / 1e6)
+
+    // deposit USDC
+    let depositUSDCRes = await client.depositUSDC({
+        base_units: 2 * 1e6
+    })
+    console.log(depositUSDCRes)
+    console.log('USDC balance after deposit:', usdcBalance, usdcBalance.base_units / 1e6)
+
+    // withdraw USDC
+    let withdrawUSDCRes = await client.withdrawUSDC({
+        base_units: 2 * 1e6,
+        recipientAddress: '[RECIPIENT_ADDRESS]'
+    })
+    console.log(withdrawUSDCRes)
+    console.log('USDC balance after withdraw:', usdcBalance, usdcBalance.base_units / 1e6)
+
     process.exit(1)
 }
 

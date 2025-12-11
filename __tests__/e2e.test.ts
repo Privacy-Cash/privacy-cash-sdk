@@ -9,8 +9,12 @@ describe('e2e test', async () => {
     if (!process.env.PRIVATE_KEY) {
         throw new Error('missing PRIVATE_KEY in .env')
     }
+    if (!process.env.RPC_URL) {
+        throw new Error('missing RPC_URL in .env')
+    }
+
     let client = new PrivacyCash({
-        RPC_url: 'https://rorie-6cdtt5-fast-mainnet.helius-rpc.com',
+        RPC_url: process.env.RPC_URL,
         owner: process.env.PRIVATE_KEY
     })
     let balance_original = await client.getPrivateBalance()

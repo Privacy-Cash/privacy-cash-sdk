@@ -10,7 +10,7 @@ import { Utxo } from '../models/utxo.js';
 import * as borsh from 'borsh';
 import { sha256 } from '@ethersproject/sha2';
 import { PublicKey } from '@solana/web3.js';
-import { INDEXER_API_URL, PROGRAM_ID } from './constants.js';
+import { RELAYER_API_URL, PROGRAM_ID } from './constants.js';
 import { logger } from './logger.js';
 import { getConfig } from '../config.js';
 
@@ -115,12 +115,16 @@ export function getExtDataHash(extData: {
 
 
 // Function to fetch Merkle proof from API for a given commitment
-export async function fetchMerkleProof(commitment: string): Promise<{ pathElements: string[], pathIndices: number[] }> {
+export async function fetchMerkleProof(commitment: string, tokenName?: string): Promise<{ pathElements: string[], pathIndices: number[] }> {
   try {
     logger.debug(`Fetching Merkle proof for commitment: ${commitment}`);
-    const response = await fetch(`${INDEXER_API_URL}/merkle/proof/${commitment}`);
+    let url = `${RELAYER_API_URL}/merkle/proof/${commitment}`
+    if (tokenName) {
+      url += '?token=' + tokenName
+    }
+    const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`Failed to fetch Merkle proof: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch Merkle proof: ${url}`);
     }
     const data = await response.json() as { pathElements: string[], pathIndices: number[] };
     logger.debug(`✓ Fetched Merkle proof with ${data.pathElements.length} elements`);
@@ -147,10 +151,14 @@ export function findNullifierPDAs(proof: any) {
 }
 
 // Function to query remote tree state from indexer API
-export async function queryRemoteTreeState(): Promise<{ root: string, nextIndex: number }> {
+export async function queryRemoteTreeState(tokenName?: string): Promise<{ root: string, nextIndex: number }> {
   try {
     logger.debug('Fetching Merkle root and nextIndex from API...');
-    const response = await fetch(`${INDEXER_API_URL}/merkle/root`);
+    let url = `${RELAYER_API_URL}/merkle/root`
+    if (tokenName) {
+      url += '?token=' + tokenName
+    }
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch Merkle root and nextIndex: ${response.status} ${response.statusText}`);
     }
@@ -196,4 +204,19 @@ export function findCrossCheckNullifierPDAs(proof: any) {
   );
 
   return { nullifier2PDA, nullifier3PDA };
+}
+
+export function getMintAddressField(mint: PublicKey): string {
+  const mintStr = mint.toString();
+
+  // Special case for SOL (system program)
+  if (mintStr === '11111111111111111111111111111112') {
+    return mintStr;
+  }
+
+  // For SPL tokens (USDC, USDT, etc): use first 31 bytes (248 bits)
+  // This provides better collision resistance than 8 bytes while still fitting in the field
+  // We will only suppport private SOL, USDC and USDT send, so there won't be any collision.
+  const mintBytes = mint.toBytes();
+  return new BN(mintBytes.slice(0, 31), 'be').toString();
 }

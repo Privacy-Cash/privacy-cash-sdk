@@ -5,7 +5,7 @@ import { Utxo } from '../models/utxo.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
 import { Keypair as UtxoKeypair } from '../models/keypair.js';
 import { keccak256 } from '@ethersproject/keccak256';
-import { PROGRAM_ID, TRANSACT_IX_DISCRIMINATOR } from './constants.js';
+import { PROGRAM_ID, TRANSACT_IX_DISCRIMINATOR, TRANSACT_SPL_IX_DISCRIMINATOR } from './constants.js';
 import BN from 'bn.js';
 
 
@@ -426,16 +426,19 @@ export class EncryptionService {// Version identifier for encryption scheme (8-b
   }
 }
 
-export function serializeProofAndExtData(proof: any, extData: any) {
+export function serializeProofAndExtData(proof: any, extData: any, isSpl: boolean = false) {
   // Create the ExtDataMinified object for the program call (only extAmount and fee)
   const extDataMinified = {
     extAmount: extData.extAmount,
     fee: extData.fee
   };
 
+  // Use the appropriate discriminator based on whether this is SPL or native SOL
+  const discriminator = isSpl ? TRANSACT_SPL_IX_DISCRIMINATOR : TRANSACT_IX_DISCRIMINATOR;
+
   // Use the same serialization approach as deposit script
   const instructionData = Buffer.concat([
-    TRANSACT_IX_DISCRIMINATOR,
+    discriminator,
     // Serialize proof
     Buffer.from(proof.proofA),
     Buffer.from(proof.proofB),

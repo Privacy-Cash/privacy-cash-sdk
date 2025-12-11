@@ -9,6 +9,8 @@ import BN from 'bn.js';
 import { Keypair } from './keypair.js';
 import * as hasher from '@lightprotocol/hasher.rs';
 import { ethers } from 'ethers';
+import { getMintAddressField } from '../utils/utils.js';
+import { PublicKey } from '@solana/web3.js';
 /**
  * Simplified Utxo class inspired by Tornado Cash Nova
  * Based on: https://github.com/tornadocash/tornado-nova/blob/f9264eeffe48bf5e04e19d8086ee6ec58cdf0d9e/src/utxo.js
@@ -57,7 +59,14 @@ export class Utxo {
     }
 
     async getCommitment(): Promise<string> {
-        return this.lightWasm.poseidonHashString([this.amount.toString(), this.keypair.pubkey.toString(), this.blinding.toString(), this.mintAddress]);
+        // return this.lightWasm.poseidonHashString([this.amount.toString(), this.keypair.pubkey.toString(), this.blinding.toString(), this.mintAddress]);
+        const mintAddressField = getMintAddressField(new PublicKey(this.mintAddress));
+        return this.lightWasm.poseidonHashString([
+            this.amount.toString(),
+            this.keypair.pubkey.toString(),
+            this.blinding.toString(),
+            mintAddressField
+        ]);
     }
 
     async getNullifier(): Promise<string> {
