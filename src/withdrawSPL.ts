@@ -6,7 +6,7 @@ import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getMintAddressField, getExtDataHash } from './utils/utils.js';
 
@@ -90,8 +90,6 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
 
 
     logger.debug('Encryption key generated from user keypair');
-
-    logger.debug(`Deployer wallet: ${DEPLOYER_ID.toString()}`);
 
     // Derive tree account PDA with mint address for SPL (different from SOL version)
     const [treeAccount] = PublicKey.findProgramAddressSync(

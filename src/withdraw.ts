@@ -6,7 +6,7 @@ import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, DEPLOYER_ID, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { fetchMerkleProof, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
 
@@ -61,8 +61,6 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     let isPartial = false
 
     logger.debug('Encryption key generated from user keypair');
-
-    logger.debug(`Deployer wallet: ${DEPLOYER_ID.toString()}`);
 
     const { treeAccount, treeTokenAccount, globalConfigAccount } = getProgramAccounts()
 

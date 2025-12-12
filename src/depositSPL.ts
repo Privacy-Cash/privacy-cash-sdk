@@ -484,7 +484,8 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const signature = await relayDepositToIndexer({
         mintAddress: mintAddress.toString(),
         publicKey,
-        signedTransaction: serializedTransaction
+        signedTransaction: serializedTransaction,
+        referrer
     });
     logger.debug('Transaction signature:', signature);
     logger.debug(`Transaction link: https://explorer.solana.com/tx/${signature}`);
