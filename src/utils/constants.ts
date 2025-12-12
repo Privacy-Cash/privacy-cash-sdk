@@ -7,7 +7,7 @@ export const PROGRAM_ID = process.env.NEXT_PUBLIC_PROGRAM_ID ? new PublicKey(pro
 
 export const FEE_RECIPIENT = new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM')
 
-export const FETCH_UTXOS_GROUP_SIZE = 10_000
+export const FETCH_UTXOS_GROUP_SIZE = 20_000
 
 export const TRANSACT_IX_DISCRIMINATOR = Buffer.from([217, 149, 130, 143, 221, 52, 252, 119]);
 
