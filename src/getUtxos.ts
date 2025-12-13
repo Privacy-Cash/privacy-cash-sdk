@@ -51,12 +51,13 @@ let decryptionTaskFinished = 0;
  * @returns Array of decrypted UTXOs that belong to the user
  */
 
-export async function getUtxos({ publicKey, connection, encryptionService, storage, abortSignal }: {
+export async function getUtxos({ publicKey, connection, encryptionService, storage, abortSignal, offset }: {
     publicKey: PublicKey,
     connection: Connection,
     encryptionService: EncryptionService,
     storage: Storage,
     abortSignal?: AbortSignal
+    offset?: number
 }): Promise<Utxo[]> {
 
     let valid_utxos: Utxo[] = []
@@ -69,15 +70,21 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
         roundStartIndex = 0
     }
     decryptionTaskFinished = 0
+    if (!offset) {
+        offset = 0
+    }
     while (true) {
         if (abortSignal?.aborted) {
             throw new Error('aborted')
         }
         let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey))
         let fetch_utxo_offset = offsetStr ? Number(offsetStr) : 0
+        if (offset) {
+            fetch_utxo_offset = Math.max(offset, fetch_utxo_offset)
+        }
         let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
         let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
-        let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService, storage })
+        let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService, storage, initOffset: offset })
         let am = 0
 
         const nonZeroUtxos: Utxo[] = [];
@@ -131,12 +138,13 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
 
 }
 
-async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionService }: {
+async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionService, initOffset }: {
     publicKey: PublicKey,
     connection: Connection,
     url: string,
     encryptionService: EncryptionService,
     storage: Storage
+    initOffset: number
 }): Promise<{
     encryptedOutputs: string[],
     utxos: Utxo[],
@@ -187,7 +195,8 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
     }
 
 
-    let decryptionTaskTotal = data.total + cachedStringNum - roundStartIndex;
+    let decryptionTaskTotal = data.total + cachedStringNum - roundStartIndex - initOffset;
+
     let batchRes = await decrypt_outputs(encryptedOutputs, encryptionService, utxoKeypair, lightWasm)
     decryptionTaskFinished += encryptedOutputs.length
     logger.debug('batchReslen', batchRes.length)
