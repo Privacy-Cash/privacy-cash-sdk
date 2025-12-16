@@ -73,6 +73,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
     if (!offset) {
         offset = 0
     }
+    roundStartIndex = Math.max(offset, roundStartIndex)
     while (true) {
         if (abortSignal?.aborted) {
             throw new Error('aborted')
@@ -195,7 +196,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
     }
 
 
-    let decryptionTaskTotal = data.total + cachedStringNum - roundStartIndex - initOffset;
+    let decryptionTaskTotal = data.total + cachedStringNum - roundStartIndex;
 
     let batchRes = await decrypt_outputs(encryptedOutputs, encryptionService, utxoKeypair, lightWasm)
     decryptionTaskFinished += encryptedOutputs.length
