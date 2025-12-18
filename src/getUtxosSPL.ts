@@ -6,7 +6,7 @@ import { EncryptionService } from './utils/encryption.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
 //@ts-ignore
 import * as ffjavascript from 'ffjavascript';
-import { FETCH_UTXOS_GROUP_SIZE, RELAYER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
+import { FETCH_UTXOS_GROUP_SIZE, RELAYER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID, SplList, tokens } from './utils/constants.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 
@@ -55,22 +55,32 @@ let decryptionTaskFinished = 0;
  * @returns Array of decrypted UTXOs that belong to the user
  */
 
-export async function getUtxosSPL({ publicKey, connection, encryptionService, storage, mintAddress, abortSignal, offset }: {
+export async function getUtxosSPL({ publicKey, connection, encryptionService, storage, abortSignal, offset, tokenSymbol }: {
     publicKey: PublicKey,
     connection: Connection,
     encryptionService: EncryptionService,
     storage: Storage,
-    mintAddress: PublicKey,
+    /** @deprecated mintAddress is deprecated, use tokenSymbol instead */
+    mintAddress?: PublicKey,
     abortSignal?: AbortSignal
     offset?: number
+    tokenSymbol?: SplList
 }): Promise<Utxo[]> {
     let valid_utxos: Utxo[] = []
     let valid_strings: string[] = []
     let history_indexes: number[] = []
     let publicKey_ata: PublicKey
+    // To ensure compatibility with earlier versions, allows user to skip tokenSymbol, and use "usdc" as default, because originally getUtxosSPL is for usdc.
+    if (!tokenSymbol) {
+        tokenSymbol = 'usdc'
+    }
+    let token = tokens.find(t => t.name == tokenSymbol)
+    if (!token) {
+        throw new Error('token not found: ' + tokenSymbol)
+    }
     try {
         publicKey_ata = await getAssociatedTokenAddress(
-            mintAddress,
+            token.pubkey,
             publicKey
         );
         let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey_ata))
@@ -93,9 +103,10 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
             if (offset) {
                 fetch_utxo_offset = Math.max(offset, fetch_utxo_offset)
             }
+            console.log(' ####fetch_utxo_offset', fetch_utxo_offset)
             let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
-            let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=usdc&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
-            let fetched = await fetchUserUtxos({ publicKey, connection, url: fetch_utxo_url, encryptionService, storage, publicKey_ata, initOffset: offset })
+            let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=${token.name}&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
+            let fetched = await fetchUserUtxos({ url: fetch_utxo_url, encryptionService, storage, publicKey_ata, tokenName: token.name })
             let am = 0
 
             const nonZeroUtxos: Utxo[] = [];
@@ -150,17 +161,15 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
     logger.debug(`valid_strings len after set: ${valid_strings.length}`)
     storage.setItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey_ata), JSON.stringify(valid_strings))
     // reorgnize
-    return valid_utxos.filter(u => u.mintAddress == mintAddress.toString())
+    return valid_utxos.filter(u => u.mintAddress == token.pubkey.toString())
 }
 
-async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionService, publicKey_ata, initOffset }: {
-    publicKey: PublicKey,
-    connection: Connection,
+async function fetchUserUtxos({ url, storage, encryptionService, publicKey_ata, tokenName }: {
     url: string,
     encryptionService: EncryptionService,
     storage: Storage,
     publicKey_ata: PublicKey
-    initOffset: number
+    tokenName: string
 }): Promise<{
     encryptedOutputs: string[],
     utxos: Utxo[],
@@ -212,7 +221,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
 
 
     let decryptionTaskTotal = data.total + cachedStringNum - roundStartIndex;
-    let batchRes = await decrypt_outputs(encryptedOutputs, encryptionService, utxoKeypair, lightWasm)
+    let batchRes = await decrypt_outputs(encryptedOutputs, encryptionService, utxoKeypair, lightWasm, tokenName)
     decryptionTaskFinished += encryptedOutputs.length
     logger.debug('batchReslen', batchRes.length)
     for (let i = 0; i < batchRes.length; i++) {
@@ -230,7 +239,7 @@ async function fetchUserUtxos({ publicKey, connection, url, storage, encryptionS
             if (decryptionTaskFinished % 100 == 0) {
                 logger.info(`(decrypting cached utxo: ${decryptionTaskFinished + 1}/${decryptionTaskTotal}...)`)
             }
-            let batchRes = await decrypt_outputs(cachedEncryptedOutputs, encryptionService, utxoKeypair, lightWasm)
+            let batchRes = await decrypt_outputs(cachedEncryptedOutputs, encryptionService, utxoKeypair, lightWasm, tokenName)
             decryptionTaskFinished += cachedEncryptedOutputs.length
             logger.debug('cachedbatchReslen', batchRes.length, ' source', cachedEncryptedOutputs.length)
             for (let i = 0; i < batchRes.length; i++) {
@@ -346,11 +355,23 @@ async function areUtxosSpent(
 // Calculate total balance
 export function getBalanceFromUtxosSPL(utxos: Utxo[]): {
     base_units: number
+    amount: number
     /** @deprecated use base_units instead */
     lamports: number
 } {
+    if (!utxos.length) {
+        return { base_units: 0, amount: 0, lamports: 0 }
+    }
+    let token = tokens.find(t => t.pubkey.toString() == utxos[0].mintAddress.toString())
+    if (!token) {
+        throw new Error('token not found for ' + utxos[0].mintAddress.toString())
+    }
     const totalBalance = utxos.reduce((sum, utxo) => sum.add(utxo.amount), new BN(0));
-    return { base_units: totalBalance.toNumber(), lamports: totalBalance.toNumber() }
+    return {
+        base_units: totalBalance.toNumber(),
+        lamports: totalBalance.toNumber(),
+        amount: totalBalance.toNumber() / token.units_per_token
+    }
 }
 
 // Decrypt single output to Utxo
@@ -454,6 +475,7 @@ async function decrypt_outputs(
     encryptionService: EncryptionService,
     utxoKeypair: UtxoKeypair,
     lightWasm: any,
+    tokenName: string
 ): Promise<DecryptRes[]> {
     let results: DecryptRes[] = [];
 
@@ -485,7 +507,7 @@ async function decrypt_outputs(
         let url = RELAYER_API_URL + `/utxos/indices`
         let res = await fetch(url, {
             method: 'POST', headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ encrypted_outputs, token: 'usdc' })
+            body: JSON.stringify({ encrypted_outputs, token: tokenName })
         })
         let j = await res.json()
         if (!j.indices || !Array.isArray(j.indices) || j.indices.length != encrypted_outputs.length) {

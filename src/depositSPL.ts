@@ -8,7 +8,7 @@ import { MerkleTree } from './utils/merkle_tree.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS } from './utils/constants.js';
+import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS, tokens, SplList } from './utils/constants.js';
 import { getProtocolAddressesWithMint, useExistingALT } from './utils/address_lookup_table.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getMint, getAccount } from '@solana/spl-token';
@@ -34,7 +34,7 @@ async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, m
         if (referrer) {
             params.referralWalletAddress = referrer
         }
-        params.mintAddress = mintAddress.toString()
+        params.mintAddress = mintAddress
 
         const response = await fetch(`${RELAYER_API_URL}/deposit/spl`, {
             method: 'POST',
@@ -63,49 +63,69 @@ async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, m
 }
 
 type DepositParams = {
-    mintAddress: PublicKey,
+    /** @deprecated mintAddress is deprecated, use tokenSymbol instead */
+    mintAddress?: PublicKey,
     publicKey: PublicKey,
     connection: Connection,
-    base_units: number,
+    base_units?: number,
+    amount?: number,
     storage: Storage,
     encryptionService: EncryptionService,
     keyBasePath: string,
     lightWasm: hasher.LightWasm,
     referrer?: string,
-    transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
+    transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
+    tokenSymbol?: SplList
 }
-export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, connection, base_units, encryptionService, transactionSigner, referrer, mintAddress }: DepositParams) {
-    let mintInfo = await getMint(connection, mintAddress)
+export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, connection, base_units, amount, encryptionService, transactionSigner, referrer, tokenSymbol }: DepositParams) {
+
+    // To ensure compatibility with earlier versions, allows user to skip tokenSymbol, and use "usdc" as default, because originally getUtxosSPL is for usdc.
+    if (!tokenSymbol) {
+        tokenSymbol = 'usdc'
+    }
+    let token = tokens.find(t => t.name == tokenSymbol)
+    if (!token) {
+        throw new Error('token not found: ' + tokenSymbol)
+    }
+
+    if (amount) {
+        base_units = amount * token.units_per_token
+    }
+
+    if (!base_units) {
+        throw new Error('You must input at leaset one of "base_units" or "amount"')
+    }
+
+
+    let mintInfo = await getMint(connection, token.pubkey)
     let units_per_token = 10 ** mintInfo.decimals
 
     let recipient = new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM')
     let recipient_ata = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         recipient,
         true
     );
     let feeRecipientTokenAccount = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         FEE_RECIPIENT,
         true
     );
     let signerTokenAccount = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         publicKey
     );
 
     // Derive tree account PDA with mint address for SPL (different from SOL version)
     const [treeAccount] = PublicKey.findProgramAddressSync(
-        [Buffer.from('merkle_tree'), mintAddress.toBuffer()],
+        [Buffer.from('merkle_tree'), token.pubkey.toBuffer()],
         PROGRAM_ID
     );
 
-    let limitAmount = await checkDepositLimit(connection, treeAccount)
-    if (limitAmount && base_units > limitAmount * 1e6) {
-        throw new Error(`Don't deposit more than ${limitAmount} USDC`)
-    }
-
-
+    // let limitAmount = await checkDepositLimit(connection, treeAccount)
+    // if (limitAmount && base_units > limitAmount * 1e6) {
+    //     throw new Error(`Don't deposit more than ${limitAmount} USDC`)
+    // }
 
     // check limit
     // let limitAmount = await checkDepositLimit(connection)
@@ -145,7 +165,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const tree = new MerkleTree(MERKLE_TREE_DEPTH, lightWasm);
 
     // Initialize root and nextIndex variables
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState('usdc');
+    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState(token.name);
 
     logger.debug(`Using tree root: ${root}`);
     logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
@@ -160,7 +180,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, mintAddress });
+    const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, tokenSymbol });
     // Calculate output amounts and external amount based on scenario
     let extAmount: number;
     let outputAmount: string;
@@ -185,12 +205,12 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             new Utxo({
                 lightWasm,
                 keypair: utxoKeypair,
-                mintAddress: mintAddress.toString()
+                mintAddress: token.pubkey.toString()
             }),
             new Utxo({
                 lightWasm,
                 keypair: utxoKeypair,
-                mintAddress: mintAddress.toString()
+                mintAddress: token.pubkey.toString()
             })
         ];
 
@@ -227,7 +247,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             lightWasm,
             keypair: utxoKeypair,
             amount: '0', // This UTXO will be inserted at currentNextIndex
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         });
 
         inputs = [
@@ -237,13 +257,13 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
         // Fetch Merkle proofs for real UTXOs
         const firstUtxoCommitment = await firstUtxo.getCommitment();
-        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment, 'usdc');
+        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment, token.name);
 
         let secondUtxoMerkleProof;
         if (secondUtxo.amount.gt(new BN(0))) {
             // Second UTXO is real, fetch its proof
             const secondUtxoCommitment = await secondUtxo.getCommitment();
-            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment, 'usdc');
+            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment, token.name);
             logger.debug('\nSecond UTXO to be consolidated:');
             await secondUtxo.log();
         }
@@ -278,14 +298,14 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             amount: outputAmount,
             keypair: utxoKeypair,
             index: currentNextIndex, // This UTXO will be inserted at currentNextIndex
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         }), // Output with value (either deposit amount minus fee, or input amount minus fee)
         new Utxo({
             lightWasm,
             amount: '0',
             keypair: utxoKeypair,
             index: currentNextIndex + 1, // This UTXO will be inserted at currentNextIndex
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         }) // Empty UTXO
     ];
 
@@ -341,7 +361,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         encryptedOutput2: encryptedOutput2,
         fee: new BN(fee_base_units),
         feeRecipient: feeRecipientTokenAccount,
-        mintAddress: mintAddress.toString()
+        mintAddress: token.pubkey.toString()
     };
     // Calculate the extDataHash with the encrypted outputs (now includes mintAddress for security)
     const calculatedExtDataHash = getExtDataHash(extData);
@@ -350,7 +370,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const input = {
         // Common transaction data
         root: root,
-        mintAddress: getMintAddressField(mintAddress),// new mint address
+        mintAddress: getMintAddressField(token.pubkey),// new mint address
         publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
         extDataHash: calculatedExtDataHash,
 
@@ -403,7 +423,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         [Buffer.from("global_config")],
         PROGRAM_ID
     );
-    const treeAta = getAssociatedTokenAddressSync(mintAddress, globalConfigPda, true);
+    const treeAta = getAssociatedTokenAddressSync(token.pubkey, globalConfigPda, true);
 
     const lookupTableAccount = await useExistingALT(connection, ALT_ADDRESS);
 
@@ -428,7 +448,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             // signer
             { pubkey: publicKey, isSigner: true, isWritable: true },
             // SPL token mint
-            { pubkey: mintAddress, isSigner: false, isWritable: false },
+            { pubkey: token.pubkey, isSigner: false, isWritable: false },
             // signer's token account
             { pubkey: signerTokenAccount, isSigner: false, isWritable: true },
             // recipient (placeholder)
@@ -482,7 +502,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     // Relay the pre-signed transaction to indexer backend
     logger.info('submitting transaction to relayer...')
     const signature = await relayDepositToIndexer({
-        mintAddress: mintAddress.toString(),
+        mintAddress: token.pubkey.toString(),
         publicKey,
         signedTransaction: serializedTransaction,
         referrer
@@ -500,7 +520,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         logger.debug('Fetching updated tree state...');
-        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=usdc'
+        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + token.name
         let res = await fetch(url)
         let resJson = await res.json()
         if (resJson.exists) {
