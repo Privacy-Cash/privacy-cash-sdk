@@ -8,7 +8,7 @@ import { MerkleTree } from './utils/merkle_tree.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS, tokens, SplList } from './utils/constants.js';
+import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS, tokens, SplList, Token } from './utils/constants.js';
 import { getProtocolAddressesWithMint, useExistingALT } from './utils/address_lookup_table.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getMint, getAccount } from '@solana/spl-token';
@@ -122,16 +122,11 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         PROGRAM_ID
     );
 
-    // let limitAmount = await checkDepositLimit(connection, treeAccount)
-    // if (limitAmount && base_units > limitAmount * 1e6) {
-    //     throw new Error(`Don't deposit more than ${limitAmount} USDC`)
-    // }
+    let limitAmount = await checkDepositLimit(connection, treeAccount, token)
 
-    // check limit
-    // let limitAmount = await checkDepositLimit(connection)
-    // if (limitAmount && base_units > limitAmount * units_per_token) {
-    //     throw new Error(`Don't deposit more than ${limitAmount} SOL`)
-    // }
+    if (limitAmount && base_units > limitAmount * token.units_per_token) {
+        throw new Error(`Don't deposit more than ${limitAmount} USDC`)
+    }
 
     // const base_units = amount_in_sol * units_per_token
     const fee_base_units = 0
@@ -536,7 +531,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 }
 
 
-async function checkDepositLimit(connection: Connection, treeAccount: PublicKey) {
+async function checkDepositLimit(connection: Connection, treeAccount: PublicKey, token: Token) {
     try {
 
         // Fetch the account data
@@ -554,20 +549,20 @@ async function checkDepositLimit(connection: Connection, treeAccount: PublicKey)
         const bump = accountInfo.data[4128];
 
         // Convert to SOL using BN division to handle large numbers
-        const lamportsPerSol = new BN(1e6);
-        const maxDepositSol = maxDepositAmount.div(lamportsPerSol);
-        const remainder = maxDepositAmount.mod(lamportsPerSol);
+        const unitesPerToken = new BN(token.units_per_token);
+        const maxDepositSpl = maxDepositAmount.div(unitesPerToken);
+        const remainder = maxDepositAmount.mod(unitesPerToken);
 
         // Format the SOL amount with decimals
-        let solFormatted = '1';
+        let amountFormatted = '1';
         if (remainder.eq(new BN(0))) {
-            solFormatted = maxDepositSol.toString();
+            amountFormatted = maxDepositSpl.toString();
         } else {
             // Handle fractional SOL by converting remainder to decimal
             const fractional = remainder.toNumber() / 1e6;
-            solFormatted = `${maxDepositSol.toString()}${fractional.toFixed(9).substring(1)}`;
+            amountFormatted = `${maxDepositSpl.toString()}${fractional.toFixed(9).substring(1)}`;
         }
-        return Number(solFormatted)
+        return Number(amountFormatted)
 
     } catch (error) {
         console.log('❌ Error reading deposit limit:', error);

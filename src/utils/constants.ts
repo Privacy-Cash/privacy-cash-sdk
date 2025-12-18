@@ -31,7 +31,13 @@ const tokenList = ['sol', 'usdc', 'usdt', 'ore'] as const;
 export type TokenList = typeof tokenList[number];
 const splList = ['usdc', 'usdt', 'ore'] as const;
 export type SplList = typeof splList[number];
-export const tokens = [
+export type Token = {
+    name: 'sol' | 'usdc' | 'usdt' | 'ore'
+    prefix: string
+    units_per_token: number
+    pubkey: PublicKey
+}
+export const tokens: Token[] = [
     {
         name: 'sol',
         pubkey: new PublicKey('So11111111111111111111111111111111111111112'),
@@ -46,14 +52,14 @@ export const tokens = [
     },
     {
         name: 'usdt',
-        pubkey: process.env.NEXT_PUBLIC_USDT_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDT_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),
+        pubkey: process.env.NEXT_PUBLIC_USDT_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDT_MINT) : new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'),
         prefix: 'usdt_',
         units_per_token: 1e6
     }
     ,
     {
         name: 'ore',
-        pubkey: process.env.NEXT_PUBLIC_ORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ORE_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),
+        pubkey: process.env.NEXT_PUBLIC_ORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ORE_MINT) : new PublicKey('oreo7nRnUq6W2G6Nr4s2959seHveG7ojfXpWH9yUCnC'),
         prefix: 'ore_',
         units_per_token: 1e11
     }

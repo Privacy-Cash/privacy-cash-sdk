@@ -289,7 +289,7 @@ export class PrivacyCash {
       * Withdraw SPL from the Privacy Cash.
       */
     async withdrawSPL({ base_units, tokenSymbol, recipientAddress, amount }: {
-        base_units: number,
+        base_units?: number,
         amount?: number,
         tokenSymbol?: SplList,
         recipientAddress?: string
