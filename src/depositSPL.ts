@@ -63,8 +63,7 @@ async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, m
 }
 
 type DepositParams = {
-    /** @deprecated mintAddress is deprecated, use tokenSymbol instead */
-    mintAddress?: PublicKey,
+    mintAddress: PublicKey | string,
     publicKey: PublicKey,
     connection: Connection,
     base_units?: number,
@@ -74,18 +73,15 @@ type DepositParams = {
     keyBasePath: string,
     lightWasm: hasher.LightWasm,
     referrer?: string,
-    transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
-    tokenSymbol?: SplList
+    transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
-export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, connection, base_units, amount, encryptionService, transactionSigner, referrer, tokenSymbol }: DepositParams) {
-
-    // To ensure compatibility with earlier versions, allows user to skip tokenSymbol, and use "usdc" as default, because originally getUtxosSPL is for usdc.
-    if (!tokenSymbol) {
-        tokenSymbol = 'usdc'
+export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, connection, base_units, amount, encryptionService, transactionSigner, referrer, mintAddress }: DepositParams) {
+    if (typeof mintAddress == 'string') {
+        mintAddress = new PublicKey(mintAddress)
     }
-    let token = tokens.find(t => t.name == tokenSymbol)
+    let token = tokens.find(t => t.pubkey.toString() == mintAddress.toString())
     if (!token) {
-        throw new Error('token not found: ' + tokenSymbol)
+        throw new Error('token not found: ' + mintAddress.toString())
     }
 
     if (amount) {
@@ -123,7 +119,6 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     );
 
     let limitAmount = await checkDepositLimit(connection, treeAccount, token)
-
     if (limitAmount && base_units > limitAmount * token.units_per_token) {
         throw new Error(`Don't deposit more than ${limitAmount} USDC`)
     }
@@ -175,7 +170,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, tokenSymbol });
+    const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, mintAddress });
     // Calculate output amounts and external amount based on scenario
     let extAmount: number;
     let outputAmount: string;

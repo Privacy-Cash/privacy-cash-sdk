@@ -53,20 +53,17 @@ type WithdrawParams = {
     encryptionService: EncryptionService,
     lightWasm: hasher.LightWasm,
     recipient: PublicKey,
-    /** @deprecated mintAddress is deprecated, use tokenSymbol instead */
-    mintAddress?: PublicKey,
+    mintAddress: PublicKey | string,
     storage: Storage,
-    tokenSymbol?: SplList
 }
 
-export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, amount, encryptionService, keyBasePath, tokenSymbol }: WithdrawParams) {
-    // To ensure compatibility with earlier versions, allows user to skip tokenSymbol, and use "usdc" as default, because originally getUtxosSPL is for usdc.
-    if (!tokenSymbol) {
-        tokenSymbol = 'usdc'
+export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, amount, encryptionService, keyBasePath, mintAddress }: WithdrawParams) {
+    if (typeof mintAddress == 'string') {
+        mintAddress = new PublicKey(mintAddress)
     }
-    let token = tokens.find(t => t.name == tokenSymbol)
+    let token = tokens.find(t => t.pubkey.toString() == mintAddress.toString())
     if (!token) {
-        throw new Error('token not found: ' + tokenSymbol)
+        throw new Error('token not found: ' + mintAddress.toString())
     }
 
     if (amount) {
@@ -140,9 +137,9 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
 
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
-    const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, tokenSymbol });
+    const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, mintAddress });
 
-    logger.debug(`Found ${mintUtxos.length} total UTXOs for ${tokenSymbol}`);
+    logger.debug(`Found ${mintUtxos.length} total UTXOs for ${token.name}`);
 
     // Calculate and log total unspent UTXO balance
     const totalUnspentBalance = mintUtxos.reduce((sum, utxo) => sum.add(utxo.amount), new BN(0));

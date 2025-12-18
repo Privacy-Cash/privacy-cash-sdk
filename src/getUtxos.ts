@@ -335,7 +335,7 @@ export function getBalanceFromUtxos(utxos: Utxo[]) {
     // const LAMPORTS_PER_SOL = new BN(1_000_000_000);
     // const balanceInSol = totalBalance.div(LAMPORTS_PER_SOL);
     // const remainderLamports = totalBalance.mod(LAMPORTS_PER_SOL);
-    return { amports: totalBalance.toNumber() }
+    return { lamports: totalBalance.toNumber() }
 }
 
 // Decrypt single output to Utxo

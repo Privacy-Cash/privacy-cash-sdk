@@ -218,18 +218,14 @@ export class PrivacyCash {
     /**
     * Returns the amount of base unites current wallet has in Privacy Cash.
     */
-    async getPrivateBalanceSpl(splSymbol: SplList) {
-        let token = tokens.find(t => t.name == splSymbol)
-        if (!token) {
-            throw new Error('depositSPL: token not found')
-        }
+    async getPrivateBalanceSpl(mintAddress: PublicKey | string) {
         this.isRuning = true
         let utxos = await getUtxosSPL({
             publicKey: this.publicKey,
             connection: this.connection,
             encryptionService: this.encryptionService,
             storage,
-            tokenSymbol: splSymbol
+            mintAddress
         })
         this.isRuning = false
         return getBalanceFromUtxosSPL(utxos)
@@ -258,16 +254,15 @@ export class PrivacyCash {
     /**
    * Deposit SPL to the Privacy Cash.
    */
-    async depositSPL({ base_units, tokenSymbol, amount }: {
+    async depositSPL({ base_units, mintAddress, amount }: {
         base_units?: number,
         amount?: number,
-        tokenSymbol?: SplList
+        mintAddress: PublicKey | string
     }) {
         this.isRuning = true
         logger.info('start depositting')
         let lightWasm = await WasmFactory.getInstance()
         let res = await depositSPL({
-            tokenSymbol,
             lightWasm,
             base_units,
             amount,
@@ -279,7 +274,8 @@ export class PrivacyCash {
                 return tx
             },
             keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
-            storage
+            storage,
+            mintAddress
         })
         this.isRuning = false
         return res
@@ -288,10 +284,10 @@ export class PrivacyCash {
     /**
       * Withdraw SPL from the Privacy Cash.
       */
-    async withdrawSPL({ base_units, tokenSymbol, recipientAddress, amount }: {
+    async withdrawSPL({ base_units, mintAddress, recipientAddress, amount }: {
         base_units?: number,
         amount?: number,
-        tokenSymbol?: SplList,
+        mintAddress: PublicKey | string,
         recipientAddress?: string
     }) {
         this.isRuning = true
@@ -309,7 +305,7 @@ export class PrivacyCash {
             recipient,
             keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
             storage,
-            tokenSymbol
+            mintAddress
         })
         console.log(`Withdraw successful. Recipient ${recipient} received ${base_units} USDC units`)
         this.isRuning = false

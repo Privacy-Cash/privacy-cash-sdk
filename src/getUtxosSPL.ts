@@ -55,29 +55,29 @@ let decryptionTaskFinished = 0;
  * @returns Array of decrypted UTXOs that belong to the user
  */
 
-export async function getUtxosSPL({ publicKey, connection, encryptionService, storage, abortSignal, offset, tokenSymbol }: {
+export async function getUtxosSPL({ publicKey, connection, encryptionService, storage, abortSignal, offset, mintAddress }: {
     publicKey: PublicKey,
     connection: Connection,
     encryptionService: EncryptionService,
     storage: Storage,
-    /** @deprecated mintAddress is deprecated, use tokenSymbol instead */
-    mintAddress?: PublicKey,
+    mintAddress: PublicKey | string,
     abortSignal?: AbortSignal
     offset?: number
-    tokenSymbol?: SplList
 }): Promise<Utxo[]> {
     let valid_utxos: Utxo[] = []
     let valid_strings: string[] = []
     let history_indexes: number[] = []
     let publicKey_ata: PublicKey
-    // To ensure compatibility with earlier versions, allows user to skip tokenSymbol, and use "usdc" as default, because originally getUtxosSPL is for usdc.
-    if (!tokenSymbol) {
-        tokenSymbol = 'usdc'
+
+    if (typeof mintAddress == 'string') {
+        mintAddress = new PublicKey(mintAddress)
     }
-    let token = tokens.find(t => t.name == tokenSymbol)
+
+    let token = tokens.find(t => t.pubkey.toString() == mintAddress.toString())
     if (!token) {
-        throw new Error('token not found: ' + tokenSymbol)
+        throw new Error('token not found: ' + mintAddress.toString())
     }
+
     try {
         publicKey_ata = await getAssociatedTokenAddress(
             token.pubkey,
