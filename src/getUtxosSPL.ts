@@ -78,6 +78,8 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
         throw new Error('token not found: ' + mintAddress.toString())
     }
 
+    logger.debug('token name: ' + token.name + ', token address' + token.pubkey.toString())
+
     try {
         publicKey_ata = await getAssociatedTokenAddress(
             token.pubkey,
@@ -161,7 +163,12 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
     logger.debug(`valid_strings len after set: ${valid_strings.length}`)
     storage.setItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey_ata), JSON.stringify(valid_strings))
     // reorgnize
-    return valid_utxos.filter(u => u.mintAddress == token.pubkey.toString())
+    if (valid_utxos.length) {
+        console.log('filter mint', valid_utxos[0].mintAddress, token.pubkey.toString())
+    }
+    let filtered_utxos = valid_utxos.filter(u => u.mintAddress == token.pubkey.toString())
+    console.log('filtered_utxos.len', filtered_utxos.length)
+    return filtered_utxos
 }
 
 async function fetchUserUtxos({ url, storage, encryptionService, publicKey_ata, tokenName }: {
