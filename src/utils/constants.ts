@@ -58,14 +58,14 @@ export const tokens: Token[] = [
     },
     {
         name: 'zec',
-        pubkey: process.env.NEXT_PUBLIC_USDT_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDT_MINT) : new PublicKey('A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS'),
+        pubkey: process.env.NEXT_PUBLIC_ZEC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ZEC_MINT) : new PublicKey('A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS'),
         prefix: 'zec_',
         units_per_token: 1e8
     }
     ,
     {
         name: 'ore',
-        pubkey: process.env.NEXT_PUBLIC_ORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ORE_MINT) : new PublicKey('oreo7nRnUq6W2G6Nr4s2959seHveG7ojfXpWH9yUCnC'),
+        pubkey: process.env.NEXT_PUBLIC_ORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ORE_MINT) : new PublicKey('oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp'),
         prefix: 'ore_',
         units_per_token: 1e11
     }

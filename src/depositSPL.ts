@@ -89,12 +89,12 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     }
 
     if (!base_units) {
-        throw new Error('You must input at leaset one of "base_units" or "amount"')
+        throw new Error('You must input at least one of "base_units" or "amount"')
     }
 
 
-    let mintInfo = await getMint(connection, token.pubkey)
-    let units_per_token = 10 ** mintInfo.decimals
+    // let mintInfo = await getMint(connection, token.pubkey)
+    // let units_per_token = 10 ** mintInfo.decimals
 
     let recipient = new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM')
     let recipient_ata = getAssociatedTokenAddressSync(
@@ -112,7 +112,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         publicKey
     );
 
-    // Derive tree account PDA with mint address for SPL (different from SOL version)
+    // Derive tree account PDA with mint address for SPL
     const [treeAccount] = PublicKey.findProgramAddressSync(
         [Buffer.from('merkle_tree'), token.pubkey.toBuffer()],
         PROGRAM_ID
@@ -120,25 +120,25 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     let limitAmount = await checkDepositLimit(connection, treeAccount, token)
     if (limitAmount && base_units > limitAmount * token.units_per_token) {
-        throw new Error(`Don't deposit more than ${limitAmount} USDC`)
+        throw new Error(`Don't deposit more than ${limitAmount} ${token.name.toUpperCase()}`)
     }
 
     // const base_units = amount_in_sol * units_per_token
     const fee_base_units = 0
     logger.debug('Encryption key generated from user keypair');
     logger.debug(`User wallet: ${publicKey.toString()}`);
-    logger.debug(`Deposit amount: ${base_units} base_units (${base_units / units_per_token} USDC)`);
-    logger.debug(`Calculated fee: ${fee_base_units} base_units (${fee_base_units / units_per_token} USDC)`);
+    logger.debug(`Deposit amount: ${base_units} base_units (${base_units / token.units_per_token}  ${token.name.toUpperCase()})`);
+    logger.debug(`Calculated fee: ${fee_base_units} base_units (${fee_base_units / token.units_per_token}  ${token.name.toUpperCase()})`);
 
     // Check SPL balance
     const accountInfo = await getAccount(connection, signerTokenAccount)
     let balance = Number(accountInfo.amount)
-    logger.debug(`USDC wallet balance: ${balance / units_per_token} USDC`);
+    logger.debug(`wallet balance: ${balance / token.units_per_token}  ${token.name.toUpperCase()}`);
     console.log('balance', balance)
     console.log('base_units + fee_base_units', base_units + fee_base_units)
 
     if (balance < (base_units + fee_base_units)) {
-        throw new Error(`Insufficient balance. Need at least ${(base_units + fee_base_units) / units_per_token} USDC.`);
+        throw new Error(`Insufficient balance. Need at least ${(base_units + fee_base_units) / token.units_per_token}  ${token.name.toUpperCase()}.`);
     }
 
     // Check SOL balance
@@ -543,19 +543,19 @@ async function checkDepositLimit(connection: Connection, treeAccount: PublicKey,
         const maxDepositAmount = new BN(accountInfo.data.slice(4120, 4128), 'le');
         const bump = accountInfo.data[4128];
 
-        // Convert to SOL using BN division to handle large numbers
+        // Convert to SPL using BN division to handle large numbers
         const unitesPerToken = new BN(token.units_per_token);
         const maxDepositSpl = maxDepositAmount.div(unitesPerToken);
         const remainder = maxDepositAmount.mod(unitesPerToken);
 
-        // Format the SOL amount with decimals
+        // Format the SPL amount with decimals
         let amountFormatted = '1';
         if (remainder.eq(new BN(0))) {
             amountFormatted = maxDepositSpl.toString();
         } else {
-            // Handle fractional SOL by converting remainder to decimal
-            const fractional = remainder.toNumber() / 1e6;
-            amountFormatted = `${maxDepositSpl.toString()}${fractional.toFixed(9).substring(1)}`;
+            // Handle fractional SPL by converting remainder to decimal
+            const fractional = remainder.toNumber() / token.units_per_token;
+            amountFormatted = `${maxDepositSpl.toString()}${fractional.toFixed(Math.log10(token.units_per_token)).substring(1)}`;
         }
         return Number(amountFormatted)
 
