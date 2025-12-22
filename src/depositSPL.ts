@@ -543,19 +543,19 @@ async function checkDepositLimit(connection: Connection, treeAccount: PublicKey,
         const maxDepositAmount = new BN(accountInfo.data.slice(4120, 4128), 'le');
         const bump = accountInfo.data[4128];
 
-        // Convert to SOL using BN division to handle large numbers
+        // Convert to SPL using BN division to handle large numbers
         const unitesPerToken = new BN(token.units_per_token);
         const maxDepositSpl = maxDepositAmount.div(unitesPerToken);
         const remainder = maxDepositAmount.mod(unitesPerToken);
 
-        // Format the SOL amount with decimals
+        // Format the SPL amount with decimals
         let amountFormatted = '1';
         if (remainder.eq(new BN(0))) {
             amountFormatted = maxDepositSpl.toString();
         } else {
-            // Handle fractional SOL by converting remainder to decimal
+            // Handle fractional SPL by converting remainder to decimal
             const fractional = remainder.toNumber() / token.units_per_token;
-            amountFormatted = `${maxDepositSpl.toString()}${fractional.toFixed(9).substring(1)}`;
+            amountFormatted = `${maxDepositSpl.toString()}${fractional.toFixed(Math.log10(token.units_per_token)).substring(1)}`;
         }
         return Number(amountFormatted)
 
