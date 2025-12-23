@@ -26,3 +26,47 @@ export const LSK_FETCH_OFFSET = 'fetch_offset'
 export const LSK_ENCRYPTED_OUTPUTS = 'encrypted_outputs'
 
 export const USDC_MINT = process.env.NEXT_PUBLIC_USDC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
+
+const tokenList = ['sol', 'usdc', 'usdt', 'zec', 'ore'] as const;
+export type TokenList = typeof tokenList[number];
+const splList = ['usdc', 'usdt', 'ore'] as const;
+export type SplList = typeof splList[number];
+export type Token = {
+    name: 'sol' | 'usdc' | 'usdt' | 'zec' | 'ore'
+    prefix: string
+    units_per_token: number
+    pubkey: PublicKey
+}
+export const tokens: Token[] = [
+    {
+        name: 'sol',
+        pubkey: new PublicKey('So11111111111111111111111111111111111111112'),
+        prefix: '',
+        units_per_token: 1e9
+    },
+    {
+        name: 'usdc',
+        pubkey: process.env.NEXT_PUBLIC_USDC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),
+        prefix: 'usdc_',
+        units_per_token: 1e6
+    },
+    {
+        name: 'usdt',
+        pubkey: process.env.NEXT_PUBLIC_USDT_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDT_MINT) : new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'),
+        prefix: 'usdt_',
+        units_per_token: 1e6
+    },
+    {
+        name: 'zec',
+        pubkey: process.env.NEXT_PUBLIC_ZEC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ZEC_MINT) : new PublicKey('A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS'),
+        prefix: 'zec_',
+        units_per_token: 1e8
+    }
+    ,
+    {
+        name: 'ore',
+        pubkey: process.env.NEXT_PUBLIC_ORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ORE_MINT) : new PublicKey('oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp'),
+        prefix: 'ore_',
+        units_per_token: 1e11
+    }
+]

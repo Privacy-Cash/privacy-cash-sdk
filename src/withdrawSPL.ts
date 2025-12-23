@@ -6,7 +6,7 @@ import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID, SplList, tokens } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getMintAddressField, getExtDataHash } from './utils/utils.js';
 
@@ -20,7 +20,6 @@ import { getAssociatedTokenAddressSync, getMint } from '@solana/spl-token';
 // Function to submit withdraw request to indexer backend
 async function submitWithdrawToIndexer(params: any): Promise<string> {
     try {
-
         const response = await fetch(`${RELAYER_API_URL}/withdraw/spl`, {
             method: 'POST',
             headers: {
@@ -48,43 +47,64 @@ async function submitWithdrawToIndexer(params: any): Promise<string> {
 type WithdrawParams = {
     publicKey: PublicKey,
     connection: Connection,
-    base_units: number,
+    base_units?: number,
+    amount?: number,
     keyBasePath: string,
     encryptionService: EncryptionService,
     lightWasm: hasher.LightWasm,
     recipient: PublicKey,
-    mintAddress: PublicKey,
-    storage: Storage
+    mintAddress: PublicKey | string,
+    storage: Storage,
 }
 
-export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, encryptionService, keyBasePath, mintAddress }: WithdrawParams) {
-    let mintInfo = await getMint(connection, mintAddress)
+export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, amount, encryptionService, keyBasePath, mintAddress }: WithdrawParams) {
+    if (typeof mintAddress == 'string') {
+        mintAddress = new PublicKey(mintAddress)
+    }
+    let token = tokens.find(t => t.pubkey.toString() == mintAddress.toString())
+    if (!token) {
+        throw new Error('token not found: ' + mintAddress.toString())
+    }
+
+    if (amount) {
+        base_units = amount * token.units_per_token
+    }
+
+    if (!base_units) {
+        throw new Error('You must input at leaset one of "base_units" or "amount"')
+    }
+
+
+    let mintInfo = await getMint(connection, token.pubkey)
     let units_per_token = 10 ** mintInfo.decimals
 
     let withdraw_fee_rate = await getConfig('withdraw_fee_rate')
-    let withdraw_rent_fee = await getConfig('usdc_withdraw_rent_fee')
-
-    let fee_base_units = Math.floor(base_units * withdraw_fee_rate + units_per_token * withdraw_rent_fee)
+    let withdraw_rent_fees = await getConfig('rent_fees')
+    let token_rent_fee = withdraw_rent_fees[token.name]
+    if (!token_rent_fee) {
+        throw new Error('can not find token_rent_fee for ' + token.name)
+    }
+    let fee_base_units = Math.floor(base_units * withdraw_fee_rate + units_per_token * token_rent_fee)
     base_units -= fee_base_units
 
     if (base_units <= 0) {
-        throw new Error('withdraw amount too low')
+        throw new Error('withdraw amount too low, at least ' + fee_base_units / token_rent_fee)
     }
     let isPartial = false
 
     let recipient_ata = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         recipient,
         true
     );
 
     let feeRecipientTokenAccount = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         FEE_RECIPIENT,
         true
     );
     let signerTokenAccount = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         publicKey
     );
 
@@ -93,14 +113,14 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
 
     // Derive tree account PDA with mint address for SPL (different from SOL version)
     const [treeAccount] = PublicKey.findProgramAddressSync(
-        [Buffer.from('merkle_tree'), mintAddress.toBuffer()],
+        [Buffer.from('merkle_tree'), token.pubkey.toBuffer()],
         PROGRAM_ID
     );
 
     const { globalConfigAccount, treeTokenAccount } = getProgramAccounts()
 
     // Get current tree state
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState('usdc');
+    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState(token.name);
     logger.debug(`Using tree root: ${root}`);
     logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
 
@@ -119,7 +139,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     logger.debug('\nFetching existing UTXOs...');
     const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, mintAddress });
 
-    logger.debug(`Found ${mintUtxos.length} total UTXOs`);
+    logger.debug(`Found ${mintUtxos.length} total UTXOs for ${token.name}`);
 
     // Calculate and log total unspent UTXO balance
     const totalUnspentBalance = mintUtxos.reduce((sum, utxo) => sum.add(utxo.amount), new BN(0));
@@ -138,7 +158,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         lightWasm,
         keypair: utxoKeypair,
         amount: '0',
-        mintAddress: mintAddress.toString()
+        mintAddress: token.pubkey.toString()
     });
 
     const inputs = [firstInput, secondInput];
@@ -171,7 +191,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
             }
             // For real UTXOs, fetch the proof from API
             const commitment = await utxo.getCommitment();
-            return fetchMerkleProof(commitment, 'usdc');
+            return fetchMerkleProof(commitment, token.name);
         })
     );
 
@@ -186,14 +206,14 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
             amount: changeAmount.toString(),
             keypair: utxoKeypairV2,
             index: currentNextIndex,
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         }), // Change output
         new Utxo({
             lightWasm,
             amount: '0',
             keypair: utxoKeypairV2,
             index: currentNextIndex + 1,
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         }) // Empty UTXO
     ];
 
@@ -255,7 +275,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         encryptedOutput2: encryptedOutput2,
         fee: new BN(fee_base_units),
         feeRecipient: feeRecipientTokenAccount,
-        mintAddress: mintAddress.toString()
+        mintAddress: token.pubkey.toString()
     };
     // Calculate the extDataHash with the encrypted outputs
     const calculatedExtDataHash = getExtDataHash(extData);
@@ -264,7 +284,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     const input = {
         // Common transaction data
         root: root,
-        mintAddress: getMintAddressField(mintAddress),// new mint address
+        mintAddress: getMintAddressField(token.pubkey),// new mint address
         publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
         extDataHash: calculatedExtDataHash,
 
@@ -322,7 +342,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         [Buffer.from("global_config")],
         PROGRAM_ID
     );
-    const treeAta = getAssociatedTokenAddressSync(mintAddress, globalConfigPda, true);
+    const treeAta = getAssociatedTokenAddressSync(token.pubkey, globalConfigPda, true);
 
     // Prepare withdraw parameters for indexer backend
     const withdrawParams = {
@@ -342,7 +362,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         senderAddress: publicKey.toString(),
         treeAta: treeAta.toString(),
         recipientAta: recipient_ata.toString(),
-        mintAddress: mintAddress.toString(),
+        mintAddress: token.pubkey.toString(),
         feeRecipientTokenAccount: feeRecipientTokenAccount.toString()
     };
 
@@ -362,7 +382,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         console.log(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         console.log('Fetching updated tree state...');
-        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=usdc')
+        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + token.name)
         let resJson = await res.json()
         console.log('resJson:', resJson)
         if (resJson.exists) {

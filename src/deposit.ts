@@ -67,6 +67,7 @@ type DepositParams = {
 export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner, referrer }: DepositParams) {
     // check limit
     let limitAmount = await checkDepositLimit(connection)
+
     if (limitAmount && amount_in_lamports > limitAmount * LAMPORTS_PER_SOL) {
         throw new Error(`Don't deposit more than ${limitAmount} SOL`)
     }
@@ -451,7 +452,7 @@ async function checkDepositLimit(connection: Connection) {
         const accountInfo = await connection.getAccountInfo(treeAccount);
 
         if (!accountInfo) {
-            console.error('❌ Tree account not found. Make sure the program is initialized.');
+            console.error('❌ Tree account not found. Make sure the program is initialized.' + PROGRAM_ID);
             return;
         }
 

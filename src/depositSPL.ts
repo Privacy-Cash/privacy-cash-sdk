@@ -8,7 +8,7 @@ import { MerkleTree } from './utils/merkle_tree.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS } from './utils/constants.js';
+import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS, tokens, SplList, Token } from './utils/constants.js';
 import { getProtocolAddressesWithMint, useExistingALT } from './utils/address_lookup_table.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getMint, getAccount } from '@solana/spl-token';
@@ -34,7 +34,7 @@ async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, m
         if (referrer) {
             params.referralWalletAddress = referrer
         }
-        params.mintAddress = mintAddress.toString()
+        params.mintAddress = mintAddress
 
         const response = await fetch(`${RELAYER_API_URL}/deposit/spl`, {
             method: 'POST',
@@ -63,10 +63,11 @@ async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, m
 }
 
 type DepositParams = {
-    mintAddress: PublicKey,
+    mintAddress: PublicKey | string,
     publicKey: PublicKey,
     connection: Connection,
-    base_units: number,
+    base_units?: number,
+    amount?: number,
     storage: Storage,
     encryptionService: EncryptionService,
     keyBasePath: string,
@@ -74,61 +75,70 @@ type DepositParams = {
     referrer?: string,
     transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
-export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, connection, base_units, encryptionService, transactionSigner, referrer, mintAddress }: DepositParams) {
-    let mintInfo = await getMint(connection, mintAddress)
-    let units_per_token = 10 ** mintInfo.decimals
+export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, connection, base_units, amount, encryptionService, transactionSigner, referrer, mintAddress }: DepositParams) {
+    if (typeof mintAddress == 'string') {
+        mintAddress = new PublicKey(mintAddress)
+    }
+    let token = tokens.find(t => t.pubkey.toString() == mintAddress.toString())
+    if (!token) {
+        throw new Error('token not found: ' + mintAddress.toString())
+    }
+
+    if (amount) {
+        base_units = amount * token.units_per_token
+    }
+
+    if (!base_units) {
+        throw new Error('You must input at least one of "base_units" or "amount"')
+    }
+
+
+    // let mintInfo = await getMint(connection, token.pubkey)
+    // let units_per_token = 10 ** mintInfo.decimals
 
     let recipient = new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM')
     let recipient_ata = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         recipient,
         true
     );
     let feeRecipientTokenAccount = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         FEE_RECIPIENT,
         true
     );
     let signerTokenAccount = getAssociatedTokenAddressSync(
-        mintAddress,
+        token.pubkey,
         publicKey
     );
 
-    // Derive tree account PDA with mint address for SPL (different from SOL version)
+    // Derive tree account PDA with mint address for SPL
     const [treeAccount] = PublicKey.findProgramAddressSync(
-        [Buffer.from('merkle_tree'), mintAddress.toBuffer()],
+        [Buffer.from('merkle_tree'), token.pubkey.toBuffer()],
         PROGRAM_ID
     );
 
-    let limitAmount = await checkDepositLimit(connection, treeAccount)
-    if (limitAmount && base_units > limitAmount * 1e6) {
-        throw new Error(`Don't deposit more than ${limitAmount} USDC`)
+    let limitAmount = await checkDepositLimit(connection, treeAccount, token)
+    if (limitAmount && base_units > limitAmount * token.units_per_token) {
+        throw new Error(`Don't deposit more than ${limitAmount} ${token.name.toUpperCase()}`)
     }
-
-
-
-    // check limit
-    // let limitAmount = await checkDepositLimit(connection)
-    // if (limitAmount && base_units > limitAmount * units_per_token) {
-    //     throw new Error(`Don't deposit more than ${limitAmount} SOL`)
-    // }
 
     // const base_units = amount_in_sol * units_per_token
     const fee_base_units = 0
     logger.debug('Encryption key generated from user keypair');
     logger.debug(`User wallet: ${publicKey.toString()}`);
-    logger.debug(`Deposit amount: ${base_units} base_units (${base_units / units_per_token} USDC)`);
-    logger.debug(`Calculated fee: ${fee_base_units} base_units (${fee_base_units / units_per_token} USDC)`);
+    logger.debug(`Deposit amount: ${base_units} base_units (${base_units / token.units_per_token}  ${token.name.toUpperCase()})`);
+    logger.debug(`Calculated fee: ${fee_base_units} base_units (${fee_base_units / token.units_per_token}  ${token.name.toUpperCase()})`);
 
     // Check SPL balance
     const accountInfo = await getAccount(connection, signerTokenAccount)
     let balance = Number(accountInfo.amount)
-    logger.debug(`USDC wallet balance: ${balance / units_per_token} USDC`);
+    logger.debug(`wallet balance: ${balance / token.units_per_token}  ${token.name.toUpperCase()}`);
     console.log('balance', balance)
     console.log('base_units + fee_base_units', base_units + fee_base_units)
 
     if (balance < (base_units + fee_base_units)) {
-        throw new Error(`Insufficient balance. Need at least ${(base_units + fee_base_units) / units_per_token} USDC.`);
+        throw new Error(`Insufficient balance. Need at least ${(base_units + fee_base_units) / token.units_per_token}  ${token.name.toUpperCase()}.`);
     }
 
     // Check SOL balance
@@ -145,7 +155,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const tree = new MerkleTree(MERKLE_TREE_DEPTH, lightWasm);
 
     // Initialize root and nextIndex variables
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState('usdc');
+    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState(token.name);
 
     logger.debug(`Using tree root: ${root}`);
     logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
@@ -185,12 +195,12 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             new Utxo({
                 lightWasm,
                 keypair: utxoKeypair,
-                mintAddress: mintAddress.toString()
+                mintAddress: token.pubkey.toString()
             }),
             new Utxo({
                 lightWasm,
                 keypair: utxoKeypair,
-                mintAddress: mintAddress.toString()
+                mintAddress: token.pubkey.toString()
             })
         ];
 
@@ -227,7 +237,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             lightWasm,
             keypair: utxoKeypair,
             amount: '0', // This UTXO will be inserted at currentNextIndex
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         });
 
         inputs = [
@@ -237,13 +247,13 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
         // Fetch Merkle proofs for real UTXOs
         const firstUtxoCommitment = await firstUtxo.getCommitment();
-        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment, 'usdc');
+        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment, token.name);
 
         let secondUtxoMerkleProof;
         if (secondUtxo.amount.gt(new BN(0))) {
             // Second UTXO is real, fetch its proof
             const secondUtxoCommitment = await secondUtxo.getCommitment();
-            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment, 'usdc');
+            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment, token.name);
             logger.debug('\nSecond UTXO to be consolidated:');
             await secondUtxo.log();
         }
@@ -278,14 +288,14 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             amount: outputAmount,
             keypair: utxoKeypair,
             index: currentNextIndex, // This UTXO will be inserted at currentNextIndex
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         }), // Output with value (either deposit amount minus fee, or input amount minus fee)
         new Utxo({
             lightWasm,
             amount: '0',
             keypair: utxoKeypair,
             index: currentNextIndex + 1, // This UTXO will be inserted at currentNextIndex
-            mintAddress: mintAddress.toString()
+            mintAddress: token.pubkey.toString()
         }) // Empty UTXO
     ];
 
@@ -341,7 +351,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         encryptedOutput2: encryptedOutput2,
         fee: new BN(fee_base_units),
         feeRecipient: feeRecipientTokenAccount,
-        mintAddress: mintAddress.toString()
+        mintAddress: token.pubkey.toString()
     };
     // Calculate the extDataHash with the encrypted outputs (now includes mintAddress for security)
     const calculatedExtDataHash = getExtDataHash(extData);
@@ -350,7 +360,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const input = {
         // Common transaction data
         root: root,
-        mintAddress: getMintAddressField(mintAddress),// new mint address
+        mintAddress: getMintAddressField(token.pubkey),// new mint address
         publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
         extDataHash: calculatedExtDataHash,
 
@@ -403,7 +413,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         [Buffer.from("global_config")],
         PROGRAM_ID
     );
-    const treeAta = getAssociatedTokenAddressSync(mintAddress, globalConfigPda, true);
+    const treeAta = getAssociatedTokenAddressSync(token.pubkey, globalConfigPda, true);
 
     const lookupTableAccount = await useExistingALT(connection, ALT_ADDRESS);
 
@@ -428,7 +438,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             // signer
             { pubkey: publicKey, isSigner: true, isWritable: true },
             // SPL token mint
-            { pubkey: mintAddress, isSigner: false, isWritable: false },
+            { pubkey: token.pubkey, isSigner: false, isWritable: false },
             // signer's token account
             { pubkey: signerTokenAccount, isSigner: false, isWritable: true },
             // recipient (placeholder)
@@ -482,7 +492,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     // Relay the pre-signed transaction to indexer backend
     logger.info('submitting transaction to relayer...')
     const signature = await relayDepositToIndexer({
-        mintAddress: mintAddress.toString(),
+        mintAddress: token.pubkey.toString(),
         publicKey,
         signedTransaction: serializedTransaction,
         referrer
@@ -500,7 +510,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         logger.debug('Fetching updated tree state...');
-        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=usdc'
+        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + token.name
         let res = await fetch(url)
         let resJson = await res.json()
         if (resJson.exists) {
@@ -516,7 +526,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 }
 
 
-async function checkDepositLimit(connection: Connection, treeAccount: PublicKey) {
+async function checkDepositLimit(connection: Connection, treeAccount: PublicKey, token: Token) {
     try {
 
         // Fetch the account data
@@ -533,21 +543,21 @@ async function checkDepositLimit(connection: Connection, treeAccount: PublicKey)
         const maxDepositAmount = new BN(accountInfo.data.slice(4120, 4128), 'le');
         const bump = accountInfo.data[4128];
 
-        // Convert to SOL using BN division to handle large numbers
-        const lamportsPerSol = new BN(1e6);
-        const maxDepositSol = maxDepositAmount.div(lamportsPerSol);
-        const remainder = maxDepositAmount.mod(lamportsPerSol);
+        // Convert to SPL using BN division to handle large numbers
+        const unitesPerToken = new BN(token.units_per_token);
+        const maxDepositSpl = maxDepositAmount.div(unitesPerToken);
+        const remainder = maxDepositAmount.mod(unitesPerToken);
 
-        // Format the SOL amount with decimals
-        let solFormatted = '1';
+        // Format the SPL amount with decimals
+        let amountFormatted = '1';
         if (remainder.eq(new BN(0))) {
-            solFormatted = maxDepositSol.toString();
+            amountFormatted = maxDepositSpl.toString();
         } else {
-            // Handle fractional SOL by converting remainder to decimal
-            const fractional = remainder.toNumber() / 1e6;
-            solFormatted = `${maxDepositSol.toString()}${fractional.toFixed(9).substring(1)}`;
+            // Handle fractional SPL by converting remainder to decimal
+            const fractional = remainder.toNumber() / token.units_per_token;
+            amountFormatted = `${maxDepositSpl.toString()}${fractional.toFixed(Math.log10(token.units_per_token)).substring(1)}`;
         }
-        return Number(solFormatted)
+        return Number(amountFormatted)
 
     } catch (error) {
         console.log('❌ Error reading deposit limit:', error);
