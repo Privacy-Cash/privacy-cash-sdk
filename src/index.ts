@@ -159,7 +159,7 @@ export class PrivacyCash {
             keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
             storage
         })
-        console.log(`Withdraw successful. Recipient ${recipient} received ${res.amount_in_lamports / LAMPORTS_PER_SOL} SOL, with ${res.fee_in_lamports / LAMPORTS_PER_SOL} SOL relayers fees`)
+        logger.debug(`Withdraw successful. Recipient ${recipient} received ${res.amount_in_lamports / LAMPORTS_PER_SOL} SOL, with ${res.fee_in_lamports / LAMPORTS_PER_SOL} SOL relayers fees`)
         this.isRuning = false
         return res
     }
@@ -188,7 +188,7 @@ export class PrivacyCash {
             keyBasePath: path.join(import.meta.dirname, '..', 'circuit2', 'transaction2'),
             storage
         })
-        console.log(`Withdraw successful. Recipient ${recipient} received ${base_units} USDC units`)
+        logger.debug(`Withdraw successful. Recipient ${recipient} received ${base_units} USDC units`)
         this.isRuning = false
         return res
     }
@@ -307,7 +307,7 @@ export class PrivacyCash {
             storage,
             mintAddress
         })
-        console.log(`Withdraw successful. Recipient ${recipient} received ${base_units} USDC units`)
+        logger.debug(`Withdraw successful. Recipient ${recipient} received ${base_units} USDC units`)
         this.isRuning = false
         return res
     }

@@ -105,7 +105,7 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
             if (offset) {
                 fetch_utxo_offset = Math.max(offset, fetch_utxo_offset)
             }
-            console.log(' ####fetch_utxo_offset', fetch_utxo_offset)
+            logger.debug(' ####fetch_utxo_offset', fetch_utxo_offset)
             let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
             let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=${token.name}&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
             let fetched = await fetchUserUtxos({ url: fetch_utxo_url, encryptionService, storage, publicKey_ata, tokenName: token.name })
@@ -162,13 +162,8 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
     valid_strings = [...new Set(valid_strings)];
     logger.debug(`valid_strings len after set: ${valid_strings.length}`)
     storage.setItem(LSK_ENCRYPTED_OUTPUTS + localstorageKey(publicKey_ata), JSON.stringify(valid_strings))
-    // reorgnize
-    if (valid_utxos.length) {
-        console.log('filter mint', valid_utxos[0].mintAddress, token.pubkey.toString())
-    }
-    let filtered_utxos = valid_utxos.filter(u => u.mintAddress == token.pubkey.toString())
-    console.log('filtered_utxos.len', filtered_utxos.length)
-    return filtered_utxos
+    return valid_utxos.filter(u => u.mintAddress == token.pubkey.toString())
+
 }
 
 async function fetchUserUtxos({ url, storage, encryptionService, publicKey_ata, tokenName }: {

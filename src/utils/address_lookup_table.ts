@@ -11,6 +11,7 @@ import {
   TransactionMessage
 } from '@solana/web3.js';
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { logger } from './logger';
 
 
 /**
@@ -22,13 +23,13 @@ export async function useExistingALT(
   altAddress: PublicKey
 ): Promise<{ value: any } | null> {
   try {
-    console.log(`Using existing ALT: ${altAddress.toString()}`);
+    logger.debug(`Using existing ALT: ${altAddress.toString()}`);
     const altAccount = await connection.getAddressLookupTable(altAddress);
 
     if (altAccount.value) {
-      console.log(`✅ ALT found with ${altAccount.value.state.addresses.length} addresses`);
+      logger.debug(`✅ ALT found with ${altAccount.value.state.addresses.length} addresses`);
     } else {
-      console.log('❌ ALT not found');
+      logger.error('❌ ALT not found');
     }
 
     return altAccount;

@@ -456,7 +456,7 @@ async function checkDepositLimit(connection: Connection) {
             return;
         }
 
-        console.log(`Account data size: ${accountInfo.data.length} bytes`);
+        logger.debug(`Account data size: ${accountInfo.data.length} bytes`);
         const authority = new PublicKey(accountInfo.data.slice(8, 40));
         const nextIndex = new BN(accountInfo.data.slice(40, 48), 'le');
         const rootIndex = new BN(accountInfo.data.slice(4112, 4120), 'le');
