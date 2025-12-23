@@ -1,52 +1,100 @@
+import { PublicKey } from '@solana/web3.js'
 import { PrivacyCash } from 'privacycash'
+
+async function solExample(client: PrivacyCash, recipientAddress: string) {
+    // deposit SOL
+    let depositRes = await client.deposit({
+        lamports: 0.01 * 1_000_000_000
+    })
+    console.log(depositRes)
+
+    let privateBalance = await client.getPrivateBalance()
+    console.log('balance after deposit:', privateBalance, privateBalance.lamports / 1_000_000_000)
+
+    // withdraw SOL
+    let withdrawRes = await client.withdraw({
+        lamports: 0.01 * 1_000_000_000,
+        recipientAddress
+    })
+    console.log(withdrawRes)
+
+    privateBalance = await client.getPrivateBalance()
+    console.log('balance after withdraw:', privateBalance, privateBalance.lamports / 1_000_000_000)
+}
+
+async function usdcExample(client: PrivacyCash, recipientAddress: string) {
+    // USDC mint address
+    let mintAddress = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
+
+    // get balance
+    let privateBalance = await client.getPrivateBalanceSpl(mintAddress)
+    console.log('USDC balance:', privateBalance, privateBalance.amount)
+
+    // deposit USDC
+    let depositUSDCRes = await client.depositSPL({
+        amount: 2,
+        mintAddress
+    })
+    console.log(depositUSDCRes)
+    console.log('USDC balance after deposit:', privateBalance, privateBalance.amount)
+
+    // withdraw USDC
+    let withdrawUSDCRes = await client.withdrawSPL({
+        mintAddress,
+        amount: 2,
+        recipientAddress
+    })
+    console.log(withdrawUSDCRes)
+    console.log('USDC balance after withdraw:', privateBalance, privateBalance.amount)
+}
+
+async function usdtExample(client: PrivacyCash, recipientAddress: string) {
+    // USDT mint address
+    let mintAddress = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB')
+
+    // get balance
+    let privateBalance = await client.getPrivateBalanceSpl(mintAddress)
+    console.log('USDT balance:', privateBalance, privateBalance.amount)
+
+    // deposit USDT
+    let depositUSDCRes = await client.depositSPL({
+        amount: 2,
+        mintAddress
+    })
+    console.log(depositUSDCRes)
+    console.log('USDT balance after deposit:', privateBalance, privateBalance.amount)
+
+    // withdraw USDT
+    let withdrawUSDCRes = await client.withdrawSPL({
+        mintAddress,
+        amount: 2,
+        recipientAddress
+    })
+    console.log(withdrawUSDCRes)
+    console.log('USDT balance after withdraw:', privateBalance, privateBalance.amount)
+}
 
 async function main() {
     let client = new PrivacyCash({
         RPC_url: '[YOUR_SOLANA_MAINNET_RPC_URL]',
         owner: '[YOUR_PRIVATE_KEY]'
     })
+    // the recipient address used in withdrawal
+    let recipientAddress = '[RECIPIENT_ADDRESS]'
+
 
     // historical utxos will be cached locally for faster performance.
     // you don't need to call clearCache() unless you encountered some issues and want to do a full refresh.
     // client.clearCache()
 
-    // deposit
-    let depositRes = await client.deposit({
-        lamports: 0.02 * 1_000_000_000
-    })
-    console.log(depositRes)
+    // SOL example
+    await solExample(client, recipientAddress)
 
-    let balance = await client.getPrivateBalance()
-    console.log('balance after deposit:', balance, balance.lamports / 1_000_000_000)
+    // USDC example
+    await usdcExample(client, recipientAddress)
 
-    // withdraw
-    let withdrawRes = await client.withdraw({
-        lamports: 0.01 * 1_000_000_000,
-        recipientAddress: '[RECIPIENT_ADDRESS]'
-    })
-    console.log(withdrawRes)
-
-    balance = await client.getPrivateBalance()
-    console.log('balance after withdraw:', balance, balance.lamports / 1_000_000_000)
-
-    // get USDC balance
-    let usdcBalance = await client.getPrivateBalanceUSDC()
-    console.log('USDC balance:', usdcBalance, usdcBalance.base_units / 1e6)
-
-    // deposit USDC
-    let depositUSDCRes = await client.depositUSDC({
-        base_units: 2 * 1e6
-    })
-    console.log(depositUSDCRes)
-    console.log('USDC balance after deposit:', usdcBalance, usdcBalance.base_units / 1e6)
-
-    // withdraw USDC
-    let withdrawUSDCRes = await client.withdrawUSDC({
-        base_units: 2 * 1e6,
-        recipientAddress: '[RECIPIENT_ADDRESS]'
-    })
-    console.log(withdrawUSDCRes)
-    console.log('USDC balance after withdraw:', usdcBalance, usdcBalance.base_units / 1e6)
+    // USDT example
+    await usdtExample(client, recipientAddress)
 
     process.exit(1)
 }

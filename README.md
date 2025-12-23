@@ -9,11 +9,11 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
 ### Usage
 This SDK provides APIs for developers to interact with Privacy Cash relayers easily. Developers can easily deposit/withdraw/query balances in Privacy Cash solana program.
 
-Main APIs for this SDK are:
-a. for SOL:
-deposit(), withdraw(), getPrivateBalance()
-b. for USDC:
-depositUSDC(), withdrawUSDC(), getPrivateBalanceUSDC()
+Main APIs for this SDK are: 
+a. for SOL: 
+deposit(), withdraw(), getPrivateBalance() 
+b. for SPL (currently supporting USDC and USDT): 
+depositSPL(), withdrawSPL(), getPrivateBalanceSpl()
 
 Check the example project under /example folder. The code should be fairly self-explanatory.
 
