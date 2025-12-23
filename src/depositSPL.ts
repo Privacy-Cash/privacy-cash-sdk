@@ -45,19 +45,23 @@ async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, m
         });
 
         if (!response.ok) {
-            console.log('res text:', await response.json())
+            logger.debug('res text:', await response.text())
             throw new Error('response not ok')
             // const errorData = await response.json() as { error?: string };
             // throw new Error(`Deposit relay failed: ${response.status} ${response.statusText} - ${errorData.error || 'Unknown error'}`);
         }
-
-        const result = await response.json() as { signature: string, success: boolean };
-        logger.debug('Pre-signed deposit transaction relayed successfully!');
-        logger.debug('Response:', result);
-
+        let result: { signature: string, success: boolean }
+        try {
+            result = await response.json()
+            logger.debug('Pre-signed deposit transaction relayed successfully!');
+            logger.debug('Response:', result);
+        } catch (e) {
+            console.log('response.text', await response.text())
+            throw new Error('failed to parse json')
+        }
         return result.signature;
-    } catch (error) {
-        console.error('Failed to relay deposit transaction to indexer:', error);
+    } catch (error: any) {
+        console.error('Failed to relay deposit transaction to indexer:', error.message);
         throw error;
     }
 }
@@ -134,8 +138,8 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const accountInfo = await getAccount(connection, signerTokenAccount)
     let balance = Number(accountInfo.amount)
     logger.debug(`wallet balance: ${balance / token.units_per_token}  ${token.name.toUpperCase()}`);
-    console.log('balance', balance)
-    console.log('base_units + fee_base_units', base_units + fee_base_units)
+    logger.debug('balance', balance)
+    logger.debug('base_units + fee_base_units', base_units + fee_base_units)
 
     if (balance < (base_units + fee_base_units)) {
         throw new Error(`Insufficient balance. Need at least ${(base_units + fee_base_units) / token.units_per_token}  ${token.name.toUpperCase()}.`);
@@ -171,6 +175,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     // Fetch existing UTXOs for this user
     logger.debug('\nFetching existing UTXOs...');
     const mintUtxos = await getUtxosSPL({ connection, publicKey, encryptionService, storage, mintAddress });
+
     // Calculate output amounts and external amount based on scenario
     let extAmount: number;
     let outputAmount: string;
@@ -230,7 +235,6 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         logger.debug(`External amount (deposit): ${extAmount}`);
 
         logger.debug('\nFirst UTXO to be consolidated:');
-        await firstUtxo.log();
 
         // Use first existing UTXO as first input, and either second UTXO or dummy UTXO as second input
         const secondUtxo = mintUtxos.length > 1 ? mintUtxos[1] : new Utxo({
@@ -324,10 +328,10 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const encryptedOutput1 = encryptionService.encryptUtxo(outputs[0]);
     const encryptedOutput2 = encryptionService.encryptUtxo(outputs[1]);
 
-    logger.debug(`\nOutput[0] (with value):`);
-    await outputs[0].log();
-    logger.debug(`\nOutput[1] (empty):`);
-    await outputs[1].log();
+    // logger.debug(`\nOutput[0] (with value):`);
+    // await outputs[0].log();
+    // logger.debug(`\nOutput[1] (empty):`);
+    // await outputs[1].log();
 
     logger.debug(`\nEncrypted output 1 size: ${encryptedOutput1.length} bytes`);
     logger.debug(`Encrypted output 2 size: ${encryptedOutput2.length} bytes`);
