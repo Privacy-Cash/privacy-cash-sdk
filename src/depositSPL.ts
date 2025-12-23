@@ -45,19 +45,23 @@ async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, m
         });
 
         if (!response.ok) {
-            logger.debug('res text:', await response.json())
+            logger.debug('res text:', await response.text())
             throw new Error('response not ok')
             // const errorData = await response.json() as { error?: string };
             // throw new Error(`Deposit relay failed: ${response.status} ${response.statusText} - ${errorData.error || 'Unknown error'}`);
         }
-
-        const result = await response.json() as { signature: string, success: boolean };
-        logger.debug('Pre-signed deposit transaction relayed successfully!');
-        logger.debug('Response:', result);
-
+        let result: { signature: string, success: boolean }
+        try {
+            result = await response.json()
+            logger.debug('Pre-signed deposit transaction relayed successfully!');
+            logger.debug('Response:', result);
+        } catch (e) {
+            console.log('response.text', await response.text())
+            throw new Error('failed to parse json')
+        }
         return result.signature;
-    } catch (error) {
-        console.error('Failed to relay deposit transaction to indexer:', error);
+    } catch (error: any) {
+        console.error('Failed to relay deposit transaction to indexer:', error.message);
         throw error;
     }
 }
