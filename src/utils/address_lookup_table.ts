@@ -11,7 +11,7 @@ import {
   TransactionMessage
 } from '@solana/web3.js';
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 
 /**
