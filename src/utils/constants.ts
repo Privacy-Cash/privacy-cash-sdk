@@ -27,9 +27,9 @@ export const LSK_ENCRYPTED_OUTPUTS = 'encrypted_outputs'
 
 export const USDC_MINT = process.env.NEXT_PUBLIC_USDC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 
-const tokenList = ['sol', 'usdc', 'usdt'] as const;
+const tokenList = ['sol', 'usdc', 'usdt', 'zec'] as const;
 export type TokenList = typeof tokenList[number];
-const splList = ['usdc', 'usdt'] as const;
+const splList = ['usdc', 'usdt', 'zec'] as const;
 export type SplList = typeof splList[number];
 export type Token = {
     name: TokenList
@@ -55,5 +55,11 @@ export const tokens: Token[] = [
         pubkey: process.env.NEXT_PUBLIC_USDT_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDT_MINT) : new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'),
         prefix: 'usdt_',
         units_per_token: 1e6
-    }
+    },
+    {
+        name: 'zec',
+        pubkey: process.env.NEXT_PUBLIC_ZEC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ZEC_MINT) : new PublicKey('A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS'),
+        prefix: 'zec_',
+        units_per_token: 1e8
+    },
 ]
