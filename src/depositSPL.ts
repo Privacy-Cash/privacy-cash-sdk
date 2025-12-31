@@ -149,8 +149,8 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const solBalance = await connection.getBalance(publicKey);
     logger.debug(`SOL Wallet balance: ${solBalance / 1e9} SOL`);
 
-    if (solBalance / 1e9 < 0.01) {
-        throw new Error(`Need at least 0.01 SOL for Solana fees.`);
+    if (solBalance / 1e9 < 0.002) {
+        throw new Error(`Need at least 0.002 SOL for Solana fees.`);
     }
 
     const { globalConfigAccount } = getProgramAccounts()
