@@ -62,4 +62,10 @@ export const tokens: Token[] = [
         prefix: 'zec_',
         units_per_token: 1e8
     },
+    {
+        name: 'zec',
+        pubkey: process.env.NEXT_PUBLIC_ZEC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ZEC_MINT) : new PublicKey('oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp'),
+        prefix: 'zec_',
+        units_per_token: 1e11
+    },
 ]
