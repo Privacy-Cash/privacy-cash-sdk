@@ -52,10 +52,11 @@ type WithdrawParams = {
     encryptionService: EncryptionService,
     lightWasm: hasher.LightWasm,
     recipient: PublicKey,
-    storage: Storage
+    storage: Storage,
+    referrer?: string,
 }
 
-export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath }: WithdrawParams) {
+export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath, referrer }: WithdrawParams) {
     let fee_in_lamports = amount_in_lamports * (await getConfig('withdraw_fee_rate')) + LAMPORTS_PER_SOL * (await getConfig('withdraw_rent_fee'))
     amount_in_lamports -= fee_in_lamports
     let isPartial = false
@@ -298,7 +299,8 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         encryptedOutput2: encryptedOutput2.toString('base64'),
         fee: fee_in_lamports,
         lookupTableAddress: ALT_ADDRESS.toString(),
-        senderAddress: publicKey.toString()
+        senderAddress: publicKey.toString(),
+        referralWalletAddress: referrer
     };
 
 

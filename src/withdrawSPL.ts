@@ -55,9 +55,10 @@ type WithdrawParams = {
     recipient: PublicKey,
     mintAddress: PublicKey | string,
     storage: Storage,
+    referrer?: string,
 }
 
-export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, amount, encryptionService, keyBasePath, mintAddress }: WithdrawParams) {
+export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, amount, encryptionService, keyBasePath, mintAddress, referrer }: WithdrawParams) {
     if (typeof mintAddress == 'string') {
         mintAddress = new PublicKey(mintAddress)
     }
@@ -363,9 +364,9 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         treeAta: treeAta.toString(),
         recipientAta: recipient_ata.toString(),
         mintAddress: token.pubkey.toString(),
-        feeRecipientTokenAccount: feeRecipientTokenAccount.toString()
+        feeRecipientTokenAccount: feeRecipientTokenAccount.toString(),
+        referralWalletAddress: referrer
     };
-
 
     logger.debug('Prepared withdraw parameters for indexer backend');
 
