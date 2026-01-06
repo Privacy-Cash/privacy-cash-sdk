@@ -316,7 +316,8 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     const encryptedOutputStr = Buffer.from(encryptedOutput1).toString('hex')
     let start = Date.now()
     while (true) {
-        logger.info(`retryTimes: ${retryTimes}`)
+        logger.info('Confirming transaction..')
+        logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         logger.info('Fetching updated tree state...');
         let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr)

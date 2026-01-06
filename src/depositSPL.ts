@@ -511,6 +511,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const encryptedOutputStr = Buffer.from(encryptedOutput1).toString('hex')
     let start = Date.now()
     while (true) {
+        logger.info('Confirming transaction..')
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         logger.debug('Fetching updated tree state...');
