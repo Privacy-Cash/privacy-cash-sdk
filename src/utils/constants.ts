@@ -27,9 +27,9 @@ export const LSK_ENCRYPTED_OUTPUTS = 'encrypted_outputs'
 
 export const USDC_MINT = process.env.NEXT_PUBLIC_USDC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 
-const tokenList = ['sol', 'usdc', 'usdt', 'zec', 'ore'] as const;
+const tokenList = ['sol', 'usdc', 'usdt', 'zec', 'ore', 'store'] as const;
 export type TokenList = typeof tokenList[number];
-const splList = ['usdc', 'usdt', 'zec', 'ore'] as const;
+const splList = ['usdc', 'usdt', 'zec', 'ore', 'store'] as const;
 export type SplList = typeof splList[number];
 export type Token = {
     name: TokenList
@@ -66,6 +66,12 @@ export const tokens: Token[] = [
         name: 'ore',
         pubkey: process.env.NEXT_PUBLIC_ORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_ORE_MINT) : new PublicKey('oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp'),
         prefix: 'ore_',
+        units_per_token: 1e11
+    },
+    {
+        name: 'store',
+        pubkey: process.env.NEXT_PUBLIC_STORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_STORE_MINT) : new PublicKey('sTorERYB6xAZ1SSbwpK3zoK2EEwbBrc7TZAzg1uCGiH'),
+        prefix: 'store_',
         units_per_token: 1e11
     },
 ]
