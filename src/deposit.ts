@@ -62,9 +62,10 @@ type DepositParams = {
     keyBasePath: string,
     lightWasm: hasher.LightWasm,
     referrer?: string,
+    signer?: PublicKey,
     transactionSigner: (tx: VersionedTransaction) => Promise<VersionedTransaction>
 }
-export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner, referrer }: DepositParams) {
+export async function deposit({ lightWasm, storage, keyBasePath, publicKey, connection, amount_in_lamports, encryptionService, transactionSigner, referrer, signer }: DepositParams) {
     // check limit
     let limitAmount = await checkDepositLimit(connection)
 
@@ -72,15 +73,19 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
         throw new Error(`Don't deposit more than ${limitAmount} SOL`)
     }
 
+    if (!signer) {
+        signer = publicKey
+    }
+
     // const amount_in_lamports = amount_in_sol * LAMPORTS_PER_SOL
     const fee_amount_in_lamports = 0
     logger.debug('Encryption key generated from user keypair');
-    logger.debug(`User wallet: ${publicKey.toString()}`);
+    logger.debug(`User wallet: ${signer.toString()}`);
     logger.debug(`Deposit amount: ${amount_in_lamports} lamports (${amount_in_lamports / LAMPORTS_PER_SOL} SOL)`);
     logger.debug(`Calculated fee: ${fee_amount_in_lamports} lamports (${fee_amount_in_lamports / LAMPORTS_PER_SOL} SOL)`);
 
     // Check wallet balance
-    const balance = await connection.getBalance(publicKey);
+    const balance = await connection.getBalance(signer);
     logger.debug(`Wallet balance: ${balance / 1e9} SOL`);
 
     if (balance < amount_in_lamports + fee_amount_in_lamports) {
@@ -374,7 +379,7 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
             // fee recipient
             { pubkey: FEE_RECIPIENT, isSigner: false, isWritable: true },
             // signer
-            { pubkey: publicKey, isSigner: true, isWritable: true },
+            { pubkey: signer, isSigner: true, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
         programId: PROGRAM_ID,
@@ -390,7 +395,7 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
     const recentBlockhash = await connection.getLatestBlockhash();
 
     const messageV0 = new TransactionMessage({
-        payerKey: publicKey, // User pays for their own deposit
+        payerKey: signer, // User pays for their own deposit
         recentBlockhash: recentBlockhash.blockhash,
         instructions: [modifyComputeUnits, depositInstruction],
     }).compileToV0Message([lookupTableAccount.value]);
@@ -409,7 +414,7 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
 
     // Relay the pre-signed transaction to indexer backend
     logger.info('submitting transaction to relayer...')
-    const signature = await relayDepositToIndexer(serializedTransaction, publicKey, referrer);
+    const signature = await relayDepositToIndexer(serializedTransaction, signer, referrer);
     logger.debug('Transaction signature:', signature);
     logger.debug(`Transaction link: https://explorer.solana.com/tx/${signature}`);
 
