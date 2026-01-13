@@ -332,7 +332,15 @@ function getSolanaKeypair(
         let keyArray: Uint8Array;
 
         if (typeof secret === "string") {
-            keyArray = bs58.decode(secret);
+            try {
+                if (secret.startsWith('[') && secret.endsWith(']')) {
+                    keyArray = Uint8Array.from(JSON.parse(secret));
+                } else {
+                    keyArray = bs58.decode(secret);
+                }
+            } catch {
+                keyArray = bs58.decode(secret);
+            }
         } else if (secret instanceof Uint8Array) {
             keyArray = secret;
         } else {
