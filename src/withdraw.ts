@@ -58,7 +58,7 @@ type WithdrawParams = {
 
 export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath, referrer }: WithdrawParams) {
     let fee_in_lamports = amount_in_lamports * (await getConfig('withdraw_fee_rate')) + LAMPORTS_PER_SOL * (await getConfig('withdraw_rent_fee'))
-    amount_in_lamports -= fee_in_lamports
+    amount_in_lamports = Math.floor(amount_in_lamports - fee_in_lamports)
     let isPartial = false
 
     logger.debug('Encryption key generated from user keypair');
