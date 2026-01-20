@@ -319,7 +319,7 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         logger.info('Confirming transaction..')
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
-        logger.info('Fetching updated tree state...');
+        logger.info('Fetching updated onchain state...');
         let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr)
         let resJson = await res.json()
         logger.debug('resJson:', resJson)

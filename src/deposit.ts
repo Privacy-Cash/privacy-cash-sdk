@@ -428,7 +428,7 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
         logger.info('Confirming transaction..')
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
-        logger.debug('Fetching updated tree state...');
+        logger.debug('Fetching updated onchain state...');
         let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr)
         let resJson = await res.json()
         if (resJson.exists) {
