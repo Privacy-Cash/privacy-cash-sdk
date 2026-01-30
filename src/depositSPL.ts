@@ -474,6 +474,9 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
         units: 1_000_000
     });
+    const prioritizeCompute = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: 200_000
+    });
 
     // Create versioned transaction with Address Lookup Table
     const recentBlockhash = await connection.getLatestBlockhash();
@@ -481,7 +484,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     const messageV0 = new TransactionMessage({
         payerKey: signer, // User pays for their own deposit
         recentBlockhash: recentBlockhash.blockhash,
-        instructions: [modifyComputeUnits, depositInstruction],
+        instructions: [modifyComputeUnits, prioritizeCompute, depositInstruction],
     }).compileToV0Message([lookupTableAccount.value]);
 
 
