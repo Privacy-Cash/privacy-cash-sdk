@@ -299,7 +299,6 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         encryptedOutput2: encryptedOutput2.toString('base64'),
         fee: fee_in_lamports,
         lookupTableAddress: ALT_ADDRESS.toString(),
-        senderAddress: publicKey.toString(),
         referralWalletAddress: referrer
     };
 
