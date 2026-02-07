@@ -360,7 +360,6 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         extAmount: extAmount,
         fee: fee_base_units,
         lookupTableAddress: ALT_ADDRESS.toString(),
-        senderAddress: publicKey.toString(),
         treeAta: treeAta.toString(),
         recipientAta: recipient_ata.toString(),
         mintAddress: token.pubkey.toString(),
