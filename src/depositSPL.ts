@@ -490,6 +490,22 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     let versionedTransaction = new VersionedTransaction(messageV0);
 
+    // check tx size
+    const txSize = versionedTransaction.serialize().length
+    logger.debug(`Serialized transaction size: ${txSize} bytes`);
+    if (txSize >= 1232) {
+        logger.debug(`Transaction size ${txSize} exceeds limit. Cannot proceed.`);
+        logger.debug('Removing prioritize compute instruction to reduce size and retrying...');
+        // Remove prioritize compute instruction and recreate transaction
+        const messageV0NoPrioritize = new TransactionMessage({
+            payerKey: signer, // User pays for their own deposit
+            recentBlockhash: recentBlockhash.blockhash,
+            instructions: [modifyComputeUnits, depositInstruction],
+        }).compileToV0Message([lookupTableAccount.value]);
+        // Recreate versioned transaction without prioritize instruction
+        versionedTransaction = new VersionedTransaction(messageV0NoPrioritize);
+    }
+
     // sign tx
     versionedTransaction = await transactionSigner(versionedTransaction)
 
