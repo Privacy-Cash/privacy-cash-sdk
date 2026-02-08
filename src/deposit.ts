@@ -408,7 +408,7 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
     // check tx size
     const txSize = versionedTransaction.serialize().length;
     logger.debug(`Initial transaction size: ${txSize} bytes`);
-    if (txSize >= 1232) {
+    if (txSize > 1232) {
         logger.debug(`Transaction size ${txSize} exceeds limit. Cannot proceed.`);
         logger.debug('Removing prioritize compute instruction to reduce size and retrying...');
         // Remove prioritize compute instruction and recreate transaction
