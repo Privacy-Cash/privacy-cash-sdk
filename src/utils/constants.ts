@@ -27,9 +27,9 @@ export const LSK_ENCRYPTED_OUTPUTS = 'encrypted_outputs'
 
 export const USDC_MINT = process.env.NEXT_PUBLIC_USDC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 
-const tokenList = ['sol', 'usdc', 'usdt', 'zec', 'ore', 'store'] as const;
+const tokenList = ['sol', 'usdc', 'usdt', 'zec', 'ore', 'store', 'jlusdc', 'jlwsol'] as const;
 export type TokenList = typeof tokenList[number];
-const splList = ['usdc', 'usdt', 'zec', 'ore', 'store'] as const;
+const splList = ['usdc', 'usdt', 'zec', 'ore', 'store', 'jlusdc', 'jlwsol'] as const;
 export type SplList = typeof splList[number];
 export type Token = {
     name: TokenList
@@ -74,4 +74,16 @@ export const tokens: Token[] = [
         prefix: 'store_',
         units_per_token: 1e11
     },
+    {
+        name: 'jlusdc',
+        pubkey: process.env.NEXT_PUBLIC_JLUSDC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_JLUSDC_MINT) : new PublicKey('9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D'),
+        prefix: 'jlusdc_',
+        units_per_token: 1e6
+    },
+    {
+        name: 'jlwsol',
+        pubkey: process.env.NEXT_PUBLIC_JLW_SOL_MINT ? new PublicKey(process.env.NEXT_PUBLIC_JLW_SOL_MINT) : new PublicKey('2uQsyo1fXXQkDtcpXnLofWy88PxcvnfH2L8FPSE62FVU'),
+        prefix: 'jlwsol_',
+        units_per_token: 1e9
+    }
 ]
