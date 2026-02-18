@@ -65,11 +65,6 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
 
     const { treeAccount, treeTokenAccount, globalConfigAccount } = getProgramAccounts()
 
-    // Get current tree state
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
-    logger.debug(`Using tree root: ${root}`);
-    logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
-
     // Generate a deterministic private key derived from the wallet keypair
     const utxoPrivateKey = encryptionService.deriveUtxoPrivateKey();
 
@@ -132,6 +127,11 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     let encryptedOutput2: any
 
     let getProve = async () => {
+        // Get current tree state
+        const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
+        logger.debug(`Using tree root: ${root}`);
+        logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
+
         // Get Merkle proofs for both input UTXOs
         const inputMerkleProofs = await Promise.all(
             inputs.map(async (utxo, index) => {
@@ -268,6 +268,7 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
             if (getProveRetryCount >= 2) {
                 throw new Error('Proof generation failed after 2 attempts. Please try again later.');
             }
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
     }
 
