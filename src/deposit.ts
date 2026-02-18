@@ -1,16 +1,16 @@
-import { Connection, Keypair, PublicKey, TransactionInstruction, SystemProgram, ComputeBudgetProgram, VersionedTransaction, TransactionMessage, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import BN from 'bn.js';
-import { Utxo } from './models/utxo.js';
-import { fetchMerkleProof, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
-import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.js';
 import * as hasher from '@lightprotocol/hasher.rs';
-import { MerkleTree } from './utils/merkle_tree.js';
-import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
+import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import BN from 'bn.js';
+import { getUtxos } from './getUtxos.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
-import { getUtxos, isUtxoSpent } from './getUtxos.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS } from './utils/constants.js';
+import { Utxo } from './models/utxo.js';
 import { useExistingALT } from './utils/address_lookup_table.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL } from './utils/constants.js';
+import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { logger } from './utils/logger.js';
+import { MerkleTree } from './utils/merkle_tree.js';
+import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
+import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
 
 
 // Function to relay pre-signed deposit transaction to indexer backend
@@ -124,207 +124,226 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
     let inputMerklePathIndices: number[];
     let inputMerklePathElements: string[][];
 
-    if (existingUnspentUtxos.length === 0) {
-        // Scenario 1: Fresh deposit with dummy inputs - add new funds to the system
-        extAmount = amount_in_lamports;
-        outputAmount = new BN(amount_in_lamports).sub(new BN(fee_amount_in_lamports)).toString();
+    let getProveRetryCount = 0
+    let extData: any
+    let encryptedOutput1: any
+    let getProve = async () => {
+        if (existingUnspentUtxos.length === 0) {
+            // Scenario 1: Fresh deposit with dummy inputs - add new funds to the system
+            extAmount = amount_in_lamports;
+            outputAmount = new BN(amount_in_lamports).sub(new BN(fee_amount_in_lamports)).toString();
 
-        logger.debug(`Fresh deposit scenario (no existing UTXOs):`);
-        logger.debug(`External amount (deposit): ${extAmount}`);
-        logger.debug(`Fee amount: ${fee_amount_in_lamports}`);
-        logger.debug(`Output amount: ${outputAmount}`);
+            logger.debug(`Fresh deposit scenario (no existing UTXOs):`);
+            logger.debug(`External amount (deposit): ${extAmount}`);
+            logger.debug(`Fee amount: ${fee_amount_in_lamports}`);
+            logger.debug(`Output amount: ${outputAmount}`);
 
-        // Use two dummy UTXOs as inputs
-        inputs = [
+            // Use two dummy UTXOs as inputs
+            inputs = [
+                new Utxo({
+                    lightWasm,
+                    keypair: utxoKeypair
+                }),
+                new Utxo({
+                    lightWasm,
+                    keypair: utxoKeypair
+                })
+            ];
+
+            // Both inputs are dummy, so use mock indices and zero-filled Merkle paths
+            inputMerklePathIndices = inputs.map((input) => input.index || 0);
+            inputMerklePathElements = inputs.map(() => {
+                return [...new Array(tree.levels).fill("0")];
+            });
+        } else {
+            // Scenario 2: Deposit that consolidates with existing UTXO(s)
+            const firstUtxo = existingUnspentUtxos[0];
+            const firstUtxoAmount = firstUtxo.amount;
+            const secondUtxoAmount = existingUnspentUtxos.length > 1 ? existingUnspentUtxos[1].amount : new BN(0);
+            extAmount = amount_in_lamports; // Still depositing new funds
+
+            // Output combines existing UTXO amounts + new deposit amount - fee
+            outputAmount = firstUtxoAmount.add(secondUtxoAmount).add(new BN(amount_in_lamports)).sub(new BN(fee_amount_in_lamports)).toString();
+
+            logger.debug(`Deposit with consolidation scenario:`);
+            logger.debug(`First existing UTXO amount: ${firstUtxoAmount.toString()}`);
+            if (secondUtxoAmount.gt(new BN(0))) {
+                logger.debug(`Second existing UTXO amount: ${secondUtxoAmount.toString()}`);
+            }
+            logger.debug(`New deposit amount: ${amount_in_lamports}`);
+            logger.debug(`Fee amount: ${fee_amount_in_lamports}`);
+            logger.debug(`Output amount (existing UTXOs + deposit - fee): ${outputAmount}`);
+            logger.debug(`External amount (deposit): ${extAmount}`);
+
+            logger.debug('\nFirst UTXO to be consolidated:');
+            await firstUtxo.log();
+
+            // Use first existing UTXO as first input, and either second UTXO or dummy UTXO as second input
+            const secondUtxo = existingUnspentUtxos.length > 1 ? existingUnspentUtxos[1] : new Utxo({
+                lightWasm,
+                keypair: utxoKeypair,
+                amount: '0'
+            });
+
+            inputs = [
+                firstUtxo, // Use the first existing UTXO
+                secondUtxo // Use second UTXO if available, otherwise dummy
+            ];
+
+            // Fetch Merkle proofs for real UTXOs
+            const firstUtxoCommitment = await firstUtxo.getCommitment();
+            const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment);
+
+            let secondUtxoMerkleProof;
+            if (secondUtxo.amount.gt(new BN(0))) {
+                // Second UTXO is real, fetch its proof
+                const secondUtxoCommitment = await secondUtxo.getCommitment();
+                secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment);
+                logger.debug('\nSecond UTXO to be consolidated:');
+                await secondUtxo.log();
+            }
+
+            // Use the real pathIndices from API for real inputs, mock index for dummy input
+            inputMerklePathIndices = [
+                firstUtxo.index || 0, // Use the real UTXO's index  
+                secondUtxo.amount.gt(new BN(0)) ? (secondUtxo.index || 0) : 0 // Real UTXO index or dummy
+            ];
+
+            // Create Merkle path elements: real proof for real inputs, zeros for dummy input
+            inputMerklePathElements = [
+                firstUtxoMerkleProof.pathElements, // Real Merkle proof for first existing UTXO
+                secondUtxo.amount.gt(new BN(0)) ? secondUtxoMerkleProof!.pathElements : [...new Array(tree.levels).fill("0")] // Real proof or zero-filled for dummy
+            ];
+
+            logger.debug(`Using first UTXO with amount: ${firstUtxo.amount.toString()} and index: ${firstUtxo.index}`);
+            logger.debug(`Using second ${secondUtxo.amount.gt(new BN(0)) ? 'UTXO' : 'dummy UTXO'} with amount: ${secondUtxo.amount.toString()}${secondUtxo.amount.gt(new BN(0)) ? ` and index: ${secondUtxo.index}` : ''}`);
+            logger.debug(`First UTXO Merkle proof path indices from API: [${firstUtxoMerkleProof.pathIndices.join(', ')}]`);
+            if (secondUtxo.amount.gt(new BN(0))) {
+                logger.debug(`Second UTXO Merkle proof path indices from API: [${secondUtxoMerkleProof!.pathIndices.join(', ')}]`);
+            }
+        }
+
+        const publicAmountForCircuit = new BN(extAmount).sub(new BN(fee_amount_in_lamports)).add(FIELD_SIZE).mod(FIELD_SIZE);
+        logger.debug(`Public amount calculation: (${extAmount} - ${fee_amount_in_lamports} + FIELD_SIZE) % FIELD_SIZE = ${publicAmountForCircuit.toString()}`);
+
+        // Create outputs for the transaction with the same shared keypair
+        const outputs = [
             new Utxo({
                 lightWasm,
-                keypair: utxoKeypair
-            }),
+                amount: outputAmount,
+                keypair: utxoKeypair,
+                index: currentNextIndex // This UTXO will be inserted at currentNextIndex
+            }), // Output with value (either deposit amount minus fee, or input amount minus fee)
             new Utxo({
                 lightWasm,
-                keypair: utxoKeypair
-            })
+                amount: '0',
+                keypair: utxoKeypair,
+                index: currentNextIndex + 1 // This UTXO will be inserted at currentNextIndex + 1
+            }) // Empty UTXO
         ];
 
-        // Both inputs are dummy, so use mock indices and zero-filled Merkle paths
-        inputMerklePathIndices = inputs.map((input) => input.index || 0);
-        inputMerklePathElements = inputs.map(() => {
-            return [...new Array(tree.levels).fill("0")];
-        });
-    } else {
-        // Scenario 2: Deposit that consolidates with existing UTXO(s)
-        const firstUtxo = existingUnspentUtxos[0];
-        const firstUtxoAmount = firstUtxo.amount;
-        const secondUtxoAmount = existingUnspentUtxos.length > 1 ? existingUnspentUtxos[1].amount : new BN(0);
-        extAmount = amount_in_lamports; // Still depositing new funds
+        // Verify this matches the circuit balance equation: sumIns + publicAmount = sumOuts
+        const sumIns = inputs.reduce((sum, input) => sum.add(input.amount), new BN(0));
+        const sumOuts = outputs.reduce((sum, output) => sum.add(output.amount), new BN(0));
+        logger.debug(`Circuit balance check: sumIns(${sumIns.toString()}) + publicAmount(${publicAmountForCircuit.toString()}) should equal sumOuts(${sumOuts.toString()})`);
 
-        // Output combines existing UTXO amounts + new deposit amount - fee
-        outputAmount = firstUtxoAmount.add(secondUtxoAmount).add(new BN(amount_in_lamports)).sub(new BN(fee_amount_in_lamports)).toString();
+        // Convert to circuit-compatible format
+        const publicAmountCircuitResult = sumIns.add(publicAmountForCircuit).mod(FIELD_SIZE);
+        logger.debug(`Balance verification: ${sumIns.toString()} + ${publicAmountForCircuit.toString()} (mod FIELD_SIZE) = ${publicAmountCircuitResult.toString()}`);
+        logger.debug(`Expected sum of outputs: ${sumOuts.toString()}`);
+        logger.debug(`Balance equation satisfied: ${publicAmountCircuitResult.eq(sumOuts)}`);
 
-        logger.debug(`Deposit with consolidation scenario:`);
-        logger.debug(`First existing UTXO amount: ${firstUtxoAmount.toString()}`);
-        if (secondUtxoAmount.gt(new BN(0))) {
-            logger.debug(`Second existing UTXO amount: ${secondUtxoAmount.toString()}`);
-        }
-        logger.debug(`New deposit amount: ${amount_in_lamports}`);
-        logger.debug(`Fee amount: ${fee_amount_in_lamports}`);
-        logger.debug(`Output amount (existing UTXOs + deposit - fee): ${outputAmount}`);
-        logger.debug(`External amount (deposit): ${extAmount}`);
+        // Generate nullifiers and commitments
+        const inputNullifiers = await Promise.all(inputs.map(x => x.getNullifier()));
+        const outputCommitments = await Promise.all(outputs.map(x => x.getCommitment()));
 
-        logger.debug('\nFirst UTXO to be consolidated:');
-        await firstUtxo.log();
+        // Save original commitment and nullifier values for verification
+        logger.debug('\n=== UTXO VALIDATION ===');
+        logger.debug('Output 0 Commitment:', outputCommitments[0]);
+        logger.debug('Output 1 Commitment:', outputCommitments[1]);
 
-        // Use first existing UTXO as first input, and either second UTXO or dummy UTXO as second input
-        const secondUtxo = existingUnspentUtxos.length > 1 ? existingUnspentUtxos[1] : new Utxo({
-            lightWasm,
-            keypair: utxoKeypair,
-            amount: '0'
-        });
+        // Encrypt the UTXO data using a compact format that includes the keypair
+        logger.debug('\nEncrypting UTXOs with keypair data...');
+        encryptedOutput1 = encryptionService.encryptUtxo(outputs[0]);
+        const encryptedOutput2 = encryptionService.encryptUtxo(outputs[1]);
 
-        inputs = [
-            firstUtxo, // Use the first existing UTXO
-            secondUtxo // Use second UTXO if available, otherwise dummy
-        ];
+        logger.debug(`\nOutput[0] (with value):`);
+        await outputs[0].log();
+        logger.debug(`\nOutput[1] (empty):`);
+        await outputs[1].log();
 
-        // Fetch Merkle proofs for real UTXOs
-        const firstUtxoCommitment = await firstUtxo.getCommitment();
-        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment);
+        logger.debug(`\nEncrypted output 1 size: ${encryptedOutput1.length} bytes`);
+        logger.debug(`Encrypted output 2 size: ${encryptedOutput2.length} bytes`);
+        logger.debug(`Total encrypted outputs size: ${encryptedOutput1.length + encryptedOutput2.length} bytes`);
 
-        let secondUtxoMerkleProof;
-        if (secondUtxo.amount.gt(new BN(0))) {
-            // Second UTXO is real, fetch its proof
-            const secondUtxoCommitment = await secondUtxo.getCommitment();
-            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment);
-            logger.debug('\nSecond UTXO to be consolidated:');
-            await secondUtxo.log();
-        }
+        // Test decryption to verify commitment values match
+        logger.debug('\n=== TESTING DECRYPTION ===');
+        logger.debug('Decrypting output 1 to verify commitment matches...');
+        const decryptedUtxo1 = await encryptionService.decryptUtxo(encryptedOutput1, lightWasm);
+        const decryptedCommitment1 = await decryptedUtxo1.getCommitment();
+        logger.debug('Original commitment:', outputCommitments[0]);
+        logger.debug('Decrypted commitment:', decryptedCommitment1);
+        logger.debug('Commitment matches:', outputCommitments[0] === decryptedCommitment1);
 
-        // Use the real pathIndices from API for real inputs, mock index for dummy input
-        inputMerklePathIndices = [
-            firstUtxo.index || 0, // Use the real UTXO's index  
-            secondUtxo.amount.gt(new BN(0)) ? (secondUtxo.index || 0) : 0 // Real UTXO index or dummy
-        ];
+        // Create the deposit ExtData with real encrypted outputs
+        extData = {
+            // recipient - just a placeholder, not actually used for deposits. 
+            recipient: new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM'),
+            extAmount: new BN(extAmount),
+            encryptedOutput1: encryptedOutput1,
+            encryptedOutput2: encryptedOutput2,
+            fee: new BN(fee_amount_in_lamports),
+            feeRecipient: FEE_RECIPIENT,
+            mintAddress: inputs[0].mintAddress
+        };
 
-        // Create Merkle path elements: real proof for real inputs, zeros for dummy input
-        inputMerklePathElements = [
-            firstUtxoMerkleProof.pathElements, // Real Merkle proof for first existing UTXO
-            secondUtxo.amount.gt(new BN(0)) ? secondUtxoMerkleProof!.pathElements : [...new Array(tree.levels).fill("0")] // Real proof or zero-filled for dummy
-        ];
+        // Calculate the extDataHash with the encrypted outputs (now includes mintAddress for security)
+        const calculatedExtDataHash = getExtDataHash(extData);
 
-        logger.debug(`Using first UTXO with amount: ${firstUtxo.amount.toString()} and index: ${firstUtxo.index}`);
-        logger.debug(`Using second ${secondUtxo.amount.gt(new BN(0)) ? 'UTXO' : 'dummy UTXO'} with amount: ${secondUtxo.amount.toString()}${secondUtxo.amount.gt(new BN(0)) ? ` and index: ${secondUtxo.index}` : ''}`);
-        logger.debug(`First UTXO Merkle proof path indices from API: [${firstUtxoMerkleProof.pathIndices.join(', ')}]`);
-        if (secondUtxo.amount.gt(new BN(0))) {
-            logger.debug(`Second UTXO Merkle proof path indices from API: [${secondUtxoMerkleProof!.pathIndices.join(', ')}]`);
+        // Create the input for the proof generation (must match circuit input order exactly)
+        const input = {
+            // Common transaction data
+            root: root,
+            inputNullifier: inputNullifiers, // Use resolved values instead of Promise objects
+            outputCommitment: outputCommitments, // Use resolved values instead of Promise objects
+            publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
+            extDataHash: calculatedExtDataHash,
+
+            // Input UTXO data (UTXOs being spent) - ensure all values are in decimal format
+            inAmount: inputs.map(x => x.amount.toString(10)),
+            inPrivateKey: inputs.map(x => x.keypair.privkey),
+            inBlinding: inputs.map(x => x.blinding.toString(10)),
+            inPathIndices: inputMerklePathIndices,
+            inPathElements: inputMerklePathElements,
+
+            // Output UTXO data (UTXOs being created) - ensure all values are in decimal format
+            outAmount: outputs.map(x => x.amount.toString(10)),
+            outBlinding: outputs.map(x => x.blinding.toString(10)),
+            outPubkey: outputs.map(x => x.keypair.pubkey),
+
+            // new mint address
+            mintAddress: inputs[0].mintAddress
+        };
+
+        logger.info('generating ZK proof...');
+
+        // Generate the zero-knowledge proof
+        return await prove(input, keyBasePath);
+    }
+    let getProveResult: { proof: any, publicSignals: any } | null = null
+    while (!getProveResult) {
+        try {
+            getProveResult = await getProve()
+        } catch (error) {
+            logger.error('Proof generation failed, retrying...', error);
+            getProveRetryCount++
+            if (getProveRetryCount >= 2) {
+                throw new Error('Proof generation failed after 2 attempts. Please try again later.');
+            }
         }
     }
 
-    const publicAmountForCircuit = new BN(extAmount).sub(new BN(fee_amount_in_lamports)).add(FIELD_SIZE).mod(FIELD_SIZE);
-    logger.debug(`Public amount calculation: (${extAmount} - ${fee_amount_in_lamports} + FIELD_SIZE) % FIELD_SIZE = ${publicAmountForCircuit.toString()}`);
-
-    // Create outputs for the transaction with the same shared keypair
-    const outputs = [
-        new Utxo({
-            lightWasm,
-            amount: outputAmount,
-            keypair: utxoKeypair,
-            index: currentNextIndex // This UTXO will be inserted at currentNextIndex
-        }), // Output with value (either deposit amount minus fee, or input amount minus fee)
-        new Utxo({
-            lightWasm,
-            amount: '0',
-            keypair: utxoKeypair,
-            index: currentNextIndex + 1 // This UTXO will be inserted at currentNextIndex + 1
-        }) // Empty UTXO
-    ];
-
-    // Verify this matches the circuit balance equation: sumIns + publicAmount = sumOuts
-    const sumIns = inputs.reduce((sum, input) => sum.add(input.amount), new BN(0));
-    const sumOuts = outputs.reduce((sum, output) => sum.add(output.amount), new BN(0));
-    logger.debug(`Circuit balance check: sumIns(${sumIns.toString()}) + publicAmount(${publicAmountForCircuit.toString()}) should equal sumOuts(${sumOuts.toString()})`);
-
-    // Convert to circuit-compatible format
-    const publicAmountCircuitResult = sumIns.add(publicAmountForCircuit).mod(FIELD_SIZE);
-    logger.debug(`Balance verification: ${sumIns.toString()} + ${publicAmountForCircuit.toString()} (mod FIELD_SIZE) = ${publicAmountCircuitResult.toString()}`);
-    logger.debug(`Expected sum of outputs: ${sumOuts.toString()}`);
-    logger.debug(`Balance equation satisfied: ${publicAmountCircuitResult.eq(sumOuts)}`);
-
-    // Generate nullifiers and commitments
-    const inputNullifiers = await Promise.all(inputs.map(x => x.getNullifier()));
-    const outputCommitments = await Promise.all(outputs.map(x => x.getCommitment()));
-
-    // Save original commitment and nullifier values for verification
-    logger.debug('\n=== UTXO VALIDATION ===');
-    logger.debug('Output 0 Commitment:', outputCommitments[0]);
-    logger.debug('Output 1 Commitment:', outputCommitments[1]);
-
-    // Encrypt the UTXO data using a compact format that includes the keypair
-    logger.debug('\nEncrypting UTXOs with keypair data...');
-    const encryptedOutput1 = encryptionService.encryptUtxo(outputs[0]);
-    const encryptedOutput2 = encryptionService.encryptUtxo(outputs[1]);
-
-    logger.debug(`\nOutput[0] (with value):`);
-    await outputs[0].log();
-    logger.debug(`\nOutput[1] (empty):`);
-    await outputs[1].log();
-
-    logger.debug(`\nEncrypted output 1 size: ${encryptedOutput1.length} bytes`);
-    logger.debug(`Encrypted output 2 size: ${encryptedOutput2.length} bytes`);
-    logger.debug(`Total encrypted outputs size: ${encryptedOutput1.length + encryptedOutput2.length} bytes`);
-
-    // Test decryption to verify commitment values match
-    logger.debug('\n=== TESTING DECRYPTION ===');
-    logger.debug('Decrypting output 1 to verify commitment matches...');
-    const decryptedUtxo1 = await encryptionService.decryptUtxo(encryptedOutput1, lightWasm);
-    const decryptedCommitment1 = await decryptedUtxo1.getCommitment();
-    logger.debug('Original commitment:', outputCommitments[0]);
-    logger.debug('Decrypted commitment:', decryptedCommitment1);
-    logger.debug('Commitment matches:', outputCommitments[0] === decryptedCommitment1);
-
-    // Create the deposit ExtData with real encrypted outputs
-    const extData = {
-        // recipient - just a placeholder, not actually used for deposits. 
-        recipient: new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM'),
-        extAmount: new BN(extAmount),
-        encryptedOutput1: encryptedOutput1,
-        encryptedOutput2: encryptedOutput2,
-        fee: new BN(fee_amount_in_lamports),
-        feeRecipient: FEE_RECIPIENT,
-        mintAddress: inputs[0].mintAddress
-    };
-
-    // Calculate the extDataHash with the encrypted outputs (now includes mintAddress for security)
-    const calculatedExtDataHash = getExtDataHash(extData);
-
-    // Create the input for the proof generation (must match circuit input order exactly)
-    const input = {
-        // Common transaction data
-        root: root,
-        inputNullifier: inputNullifiers, // Use resolved values instead of Promise objects
-        outputCommitment: outputCommitments, // Use resolved values instead of Promise objects
-        publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
-        extDataHash: calculatedExtDataHash,
-
-        // Input UTXO data (UTXOs being spent) - ensure all values are in decimal format
-        inAmount: inputs.map(x => x.amount.toString(10)),
-        inPrivateKey: inputs.map(x => x.keypair.privkey),
-        inBlinding: inputs.map(x => x.blinding.toString(10)),
-        inPathIndices: inputMerklePathIndices,
-        inPathElements: inputMerklePathElements,
-
-        // Output UTXO data (UTXOs being created) - ensure all values are in decimal format
-        outAmount: outputs.map(x => x.amount.toString(10)),
-        outBlinding: outputs.map(x => x.blinding.toString(10)),
-        outPubkey: outputs.map(x => x.keypair.pubkey),
-
-        // new mint address
-        mintAddress: inputs[0].mintAddress
-    };
-
-    logger.info('generating ZK proof...');
-
-    // Generate the zero-knowledge proof
-    const { proof, publicSignals } = await prove(input, keyBasePath);
+    const { proof, publicSignals } = getProveResult;
     // Parse the proof and public signals into byte arrays
     const proofInBytes = parseProofToBytesArray(proof);
     const inputsInBytes = parseToBytesArray(publicSignals);
