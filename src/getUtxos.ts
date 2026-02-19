@@ -1,12 +1,12 @@
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import { WasmFactory } from '@lightprotocol/hasher.rs';
+import { Connection, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { Utxo } from './models/utxo.js';
 import { EncryptionService } from './utils/encryption.js';
-import { WasmFactory } from '@lightprotocol/hasher.rs';
 //@ts-ignore
 import * as ffjavascript from 'ffjavascript';
-import { FETCH_UTXOS_GROUP_SIZE, RELAYER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID } from './utils/constants.js';
+import { FETCH_UTXOS_GROUP_SIZE, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID, RELAYER_API_URL } from './utils/constants.js';
 import { logger } from './utils/logger.js';
 
 // Use type assertion for the utility functions (same pattern as in get_verification_keys.ts)
@@ -63,6 +63,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
     let valid_utxos: Utxo[] = []
     let valid_strings: string[] = []
     let history_indexes: number[] = []
+    let logIndexes: number[] = []
     let offsetStr = storage.getItem(LSK_FETCH_OFFSET + localstorageKey(publicKey))
     if (offsetStr) {
         roundStartIndex = Number(offsetStr)
@@ -92,6 +93,7 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
         const nonZeroEncrypted: any[] = [];
         for (let [k, utxo] of fetched.utxos.entries()) {
             history_indexes.push(utxo.index)
+            logIndexes.push(utxo.index)
             if (utxo.amount.toNumber() > 0) {
                 nonZeroUtxos.push(utxo);
                 nonZeroEncrypted.push(fetched.encryptedOutputs[k]);
@@ -114,6 +116,10 @@ export async function getUtxos({ publicKey, connection, encryptionService, stora
         }
         await sleep(20)
     }
+
+    // print latest 50 items in logIndexes.
+    let latestIndexes = logIndexes.sort((a, b) => b - a).slice(0, 50)
+    logger.debug(`latest fetched commitment indexes: ${latestIndexes.join(',')}`)
 
     // get history index
     let historyKey = 'tradeHistory' + localstorageKey(publicKey)
