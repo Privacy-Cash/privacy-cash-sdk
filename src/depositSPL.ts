@@ -162,6 +162,12 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     // Create the merkle tree with the pre-initialized poseidon hash
     const tree = new MerkleTree(MERKLE_TREE_DEPTH, lightWasm);
 
+    // Initialize root and nextIndex variables
+    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState(token.name);
+
+    logger.debug(`Using tree root: ${root}`);
+    logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
+
     // Generate a deterministic private key derived from the wallet keypair
     // const utxoPrivateKey = encryptionService.deriveUtxoPrivateKey();
     const utxoPrivateKey = encryptionService.getUtxoPrivateKeyV2();
@@ -187,11 +193,6 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     let extData: any
     let encryptedOutput1: any
     let getProve = async () => {
-        // Initialize root and nextIndex variables
-        const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState(token.name);
-        logger.debug(`Using tree root: ${root}`);
-        logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
-
         if (mintUtxos.length === 0) {
             // Scenario 1: Fresh deposit with dummy inputs - add new funds to the system
             extAmount = base_units;
@@ -405,7 +406,6 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             if (getProveRetryCount >= 2) {
                 throw new Error('Proof generation failed after 2 attempts. Please try again later.');
             }
-            await new Promise(resolve => setTimeout(resolve, 500));
         }
     }
     const { proof, publicSignals } = getProveResult;
