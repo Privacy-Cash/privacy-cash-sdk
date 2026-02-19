@@ -1,19 +1,19 @@
-import * as hasher from '@lightprotocol/hasher.rs';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Buffer } from 'buffer';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
+import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL, tokens } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID, SplList, tokens } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
-import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getMintAddressField, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
+import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getMintAddressField, getExtDataHash } from './utils/utils.js';
 
-import { getAssociatedTokenAddressSync, getMint } from '@solana/spl-token';
-import { getConfig } from './config.js';
-import { getUtxosSPL } from './getUtxosSPL.js';
+import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
 import { logger } from './utils/logger.js';
+import { getConfig } from './config.js';
+import { getAssociatedTokenAddressSync, getMint } from '@solana/spl-token';
 // Indexer API endpoint
 
 
@@ -180,155 +180,134 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     const changeAmount = totalInputAmount.sub(new BN(base_units)).sub(new BN(fee_base_units));
     logger.debug(`Withdrawing ${base_units} lamports with ${fee_base_units} fee, ${changeAmount.toString()} as change`);
 
+    // Get Merkle proofs for both input UTXOs
+    const inputMerkleProofs = await Promise.all(
+        inputs.map(async (utxo, index) => {
+            // For dummy UTXO (amount is 0), use a zero-filled proof
+            if (utxo.amount.eq(new BN(0))) {
+                return {
+                    pathElements: [...new Array(MERKLE_TREE_DEPTH).fill("0")],
+                    pathIndices: Array(MERKLE_TREE_DEPTH).fill(0)
+                };
+            }
+            // For real UTXOs, fetch the proof from API
+            const commitment = await utxo.getCommitment();
+            return fetchMerkleProof(commitment, token.name);
+        })
+    );
+
+    // Extract path elements and indices
+    const inputMerklePathElements = inputMerkleProofs.map(proof => proof.pathElements);
+    const inputMerklePathIndices = inputs.map(utxo => utxo.index || 0);
+
+    // Create outputs: first output is change, second is dummy (required by protocol)
+    const outputs = [
+        new Utxo({
+            lightWasm,
+            amount: changeAmount.toString(),
+            keypair: utxoKeypairV2,
+            index: currentNextIndex,
+            mintAddress: token.pubkey.toString()
+        }), // Change output
+        new Utxo({
+            lightWasm,
+            amount: '0',
+            keypair: utxoKeypairV2,
+            index: currentNextIndex + 1,
+            mintAddress: token.pubkey.toString()
+        }) // Empty UTXO
+    ];
+
     // For withdrawals, extAmount is negative (funds leaving the system)
     const extAmount = -base_units;
+    const publicAmountForCircuit = new BN(extAmount).sub(new BN(fee_base_units)).add(FIELD_SIZE).mod(FIELD_SIZE);
+    logger.debug(`Public amount calculation: (${extAmount} - ${fee_base_units} + FIELD_SIZE) % FIELD_SIZE = ${publicAmountForCircuit.toString()}`);
 
-    let getProveRetryCount = 0
-    let extData: any
-    let encryptedOutput1: any
+    // Verify this matches the circuit balance equation: sumIns + publicAmount = sumOuts
+    const sumIns = inputs.reduce((sum, input) => sum.add(input.amount), new BN(0));
+    const sumOuts = outputs.reduce((sum, output) => sum.add(output.amount), new BN(0));
+    logger.debug(`Circuit balance check: sumIns(${sumIns.toString()}) + publicAmount(${publicAmountForCircuit.toString()}) should equal sumOuts(${sumOuts.toString()})`);
 
-    let getProve = async () => {
-        // Get Merkle proofs for both input UTXOs
-        const inputMerkleProofs = await Promise.all(
-            inputs.map(async (utxo, index) => {
-                // For dummy UTXO (amount is 0), use a zero-filled proof
-                if (utxo.amount.eq(new BN(0))) {
-                    return {
-                        pathElements: [...new Array(MERKLE_TREE_DEPTH).fill("0")],
-                        pathIndices: Array(MERKLE_TREE_DEPTH).fill(0)
-                    };
-                }
-                // For real UTXOs, fetch the proof from API
-                const commitment = await utxo.getCommitment();
-                return fetchMerkleProof(commitment, token.name);
-            })
-        );
+    // Convert to circuit-compatible format
+    const publicAmountCircuitResult = sumIns.add(publicAmountForCircuit).mod(FIELD_SIZE);
+    logger.debug(`Balance verification: ${sumIns.toString()} + ${publicAmountForCircuit.toString()} (mod FIELD_SIZE) = ${publicAmountCircuitResult.toString()}`);
+    logger.debug(`Expected sum of outputs: ${sumOuts.toString()}`);
+    logger.debug(`Balance equation satisfied: ${publicAmountCircuitResult.eq(sumOuts)}`);
 
-        // Extract path elements and indices
-        const inputMerklePathElements = inputMerkleProofs.map(proof => proof.pathElements);
-        const inputMerklePathIndices = inputs.map(utxo => utxo.index || 0);
+    // Generate nullifiers and commitments
+    const inputNullifiers = await Promise.all(inputs.map(x => x.getNullifier()));
+    const outputCommitments = await Promise.all(outputs.map(x => x.getCommitment()));
 
-        // Create outputs: first output is change, second is dummy (required by protocol)
-        const outputs = [
-            new Utxo({
-                lightWasm,
-                amount: changeAmount.toString(),
-                keypair: utxoKeypairV2,
-                index: currentNextIndex,
-                mintAddress: token.pubkey.toString()
-            }), // Change output
-            new Utxo({
-                lightWasm,
-                amount: '0',
-                keypair: utxoKeypairV2,
-                index: currentNextIndex + 1,
-                mintAddress: token.pubkey.toString()
-            }) // Empty UTXO
-        ];
+    // Save original commitment and nullifier values for verification
+    logger.debug('\n=== UTXO VALIDATION ===');
+    logger.debug('Output 0 Commitment:', outputCommitments[0]);
+    logger.debug('Output 1 Commitment:', outputCommitments[1]);
 
-        const publicAmountForCircuit = new BN(extAmount).sub(new BN(fee_base_units)).add(FIELD_SIZE).mod(FIELD_SIZE);
-        logger.debug(`Public amount calculation: (${extAmount} - ${fee_base_units} + FIELD_SIZE) % FIELD_SIZE = ${publicAmountForCircuit.toString()}`);
+    // Encrypt the UTXO data using a compact format that includes the keypair
+    logger.debug('\nEncrypting UTXOs with keypair data...');
+    const encryptedOutput1 = encryptionService.encryptUtxo(outputs[0]);
+    const encryptedOutput2 = encryptionService.encryptUtxo(outputs[1]);
 
-        // Verify this matches the circuit balance equation: sumIns + publicAmount = sumOuts
-        const sumIns = inputs.reduce((sum, input) => sum.add(input.amount), new BN(0));
-        const sumOuts = outputs.reduce((sum, output) => sum.add(output.amount), new BN(0));
-        logger.debug(`Circuit balance check: sumIns(${sumIns.toString()}) + publicAmount(${publicAmountForCircuit.toString()}) should equal sumOuts(${sumOuts.toString()})`);
+    logger.debug(`\nOutput[0] (change):`);
+    await outputs[0].log();
+    logger.debug(`\nOutput[1] (empty):`);
+    await outputs[1].log();
+    logger.debug(`Encrypted output 1: ${encryptedOutput1.toString('hex')}`)
+    logger.debug(`Encrypted output 2: ${encryptedOutput2.toString('hex')}`)
+    logger.debug(`\nEncrypted output 1 size: ${encryptedOutput1.length} bytes`);
+    logger.debug(`Encrypted output 2 size: ${encryptedOutput2.length} bytes`);
+    logger.debug(`Total encrypted outputs size: ${encryptedOutput1.length + encryptedOutput2.length} bytes`);
 
-        // Convert to circuit-compatible format
-        const publicAmountCircuitResult = sumIns.add(publicAmountForCircuit).mod(FIELD_SIZE);
-        logger.debug(`Balance verification: ${sumIns.toString()} + ${publicAmountForCircuit.toString()} (mod FIELD_SIZE) = ${publicAmountCircuitResult.toString()}`);
-        logger.debug(`Expected sum of outputs: ${sumOuts.toString()}`);
-        logger.debug(`Balance equation satisfied: ${publicAmountCircuitResult.eq(sumOuts)}`);
+    // Test decryption to verify commitment values match
+    logger.debug('\n=== TESTING DECRYPTION ===');
+    logger.debug('Decrypting output 1 to verify commitment matches...');
+    const decryptedUtxo1 = await encryptionService.decryptUtxo(encryptedOutput1, lightWasm);
+    const decryptedCommitment1 = await decryptedUtxo1.getCommitment();
+    logger.debug('Original commitment:', outputCommitments[0]);
+    logger.debug('Decrypted commitment:', decryptedCommitment1);
+    logger.debug('Commitment matches:', outputCommitments[0] === decryptedCommitment1);
 
-        // Generate nullifiers and commitments
-        const inputNullifiers = await Promise.all(inputs.map(x => x.getNullifier()));
-        const outputCommitments = await Promise.all(outputs.map(x => x.getCommitment()));
+    // Create the withdrawal ExtData with real encrypted outputs
+    const extData = {
+        // it can be any address
+        recipient: recipient_ata,
+        extAmount: new BN(extAmount),
+        encryptedOutput1: encryptedOutput1,
+        encryptedOutput2: encryptedOutput2,
+        fee: new BN(fee_base_units),
+        feeRecipient: feeRecipientTokenAccount,
+        mintAddress: token.pubkey.toString()
+    };
+    // Calculate the extDataHash with the encrypted outputs
+    const calculatedExtDataHash = getExtDataHash(extData);
 
-        // Save original commitment and nullifier values for verification
-        logger.debug('\n=== UTXO VALIDATION ===');
-        logger.debug('Output 0 Commitment:', outputCommitments[0]);
-        logger.debug('Output 1 Commitment:', outputCommitments[1]);
+    // Create the input for the proof generation
+    const input = {
+        // Common transaction data
+        root: root,
+        mintAddress: getMintAddressField(token.pubkey),// new mint address
+        publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
+        extDataHash: calculatedExtDataHash,
 
-        // Encrypt the UTXO data using a compact format that includes the keypair
-        logger.debug('\nEncrypting UTXOs with keypair data...');
-        encryptedOutput1 = encryptionService.encryptUtxo(outputs[0]);
-        const encryptedOutput2 = encryptionService.encryptUtxo(outputs[1]);
+        // Input UTXO data (UTXOs being spent) - ensure all values are in decimal format
+        inAmount: inputs.map(x => x.amount.toString(10)),
+        inPrivateKey: inputs.map(x => x.keypair.privkey),
+        inBlinding: inputs.map(x => x.blinding.toString(10)),
+        inPathIndices: inputMerklePathIndices,
+        inPathElements: inputMerklePathElements,
+        inputNullifier: inputNullifiers, // Use resolved values instead of Promise objects
 
-        logger.debug(`\nOutput[0] (change):`);
-        await outputs[0].log();
-        logger.debug(`\nOutput[1] (empty):`);
-        await outputs[1].log();
-        logger.debug(`Encrypted output 1: ${encryptedOutput1.toString('hex')}`)
-        logger.debug(`Encrypted output 2: ${encryptedOutput2.toString('hex')}`)
-        logger.debug(`\nEncrypted output 1 size: ${encryptedOutput1.length} bytes`);
-        logger.debug(`Encrypted output 2 size: ${encryptedOutput2.length} bytes`);
-        logger.debug(`Total encrypted outputs size: ${encryptedOutput1.length + encryptedOutput2.length} bytes`);
+        // Output UTXO data (UTXOs being created) - ensure all values are in decimal format
+        outAmount: outputs.map(x => x.amount.toString(10)),
+        outBlinding: outputs.map(x => x.blinding.toString(10)),
+        outPubkey: outputs.map(x => x.keypair.pubkey),
+        outputCommitment: outputCommitments,
+    };
 
-        // Test decryption to verify commitment values match
-        logger.debug('\n=== TESTING DECRYPTION ===');
-        logger.debug('Decrypting output 1 to verify commitment matches...');
-        const decryptedUtxo1 = await encryptionService.decryptUtxo(encryptedOutput1, lightWasm);
-        const decryptedCommitment1 = await decryptedUtxo1.getCommitment();
-        logger.debug('Original commitment:', outputCommitments[0]);
-        logger.debug('Decrypted commitment:', decryptedCommitment1);
-        logger.debug('Commitment matches:', outputCommitments[0] === decryptedCommitment1);
+    logger.info('generating ZK proof...')
 
-        // Create the withdrawal ExtData with real encrypted outputs
-        extData = {
-            // it can be any address
-            recipient: recipient_ata,
-            extAmount: new BN(extAmount),
-            encryptedOutput1: encryptedOutput1,
-            encryptedOutput2: encryptedOutput2,
-            fee: new BN(fee_base_units),
-            feeRecipient: feeRecipientTokenAccount,
-            mintAddress: token.pubkey.toString()
-        };
-        // Calculate the extDataHash with the encrypted outputs
-        const calculatedExtDataHash = getExtDataHash(extData);
-
-        // Create the input for the proof generation
-        const input = {
-            // Common transaction data
-            root: root,
-            mintAddress: getMintAddressField(token.pubkey),// new mint address
-            publicAmount: publicAmountForCircuit.toString(), // Use proper field arithmetic result
-            extDataHash: calculatedExtDataHash,
-
-            // Input UTXO data (UTXOs being spent) - ensure all values are in decimal format
-            inAmount: inputs.map(x => x.amount.toString(10)),
-            inPrivateKey: inputs.map(x => x.keypair.privkey),
-            inBlinding: inputs.map(x => x.blinding.toString(10)),
-            inPathIndices: inputMerklePathIndices,
-            inPathElements: inputMerklePathElements,
-            inputNullifier: inputNullifiers, // Use resolved values instead of Promise objects
-
-            // Output UTXO data (UTXOs being created) - ensure all values are in decimal format
-            outAmount: outputs.map(x => x.amount.toString(10)),
-            outBlinding: outputs.map(x => x.blinding.toString(10)),
-            outPubkey: outputs.map(x => x.keypair.pubkey),
-            outputCommitment: outputCommitments,
-        };
-
-        logger.info('generating ZK proof...')
-
-        // Generate the zero-knowledge proof
-        return await prove(input, keyBasePath);
-    }
-    let getProveResult: { proof: any, publicSignals: any } | null = null
-    while (!getProveResult) {
-        try {
-            getProveResult = await getProve()
-        } catch (error) {
-            logger.error('Proof generation failed, retrying...', error);
-            getProveRetryCount++
-            if (getProveRetryCount >= 2) {
-                throw new Error('Proof generation failed after 2 attempts. Please try again later.');
-            }
-        }
-    }
-
-    const { proof, publicSignals } = getProveResult;
+    // Generate the zero-knowledge proof
+    const { proof, publicSignals } = await prove(input, keyBasePath);
 
     // Parse the proof and public signals into byte arrays
     const proofInBytes = parseProofToBytesArray(proof);
