@@ -1,16 +1,16 @@
-import { Connection, Keypair, PublicKey, TransactionInstruction, SystemProgram, ComputeBudgetProgram, VersionedTransaction, TransactionMessage, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import BN from 'bn.js';
-import { Utxo } from './models/utxo.js';
-import { fetchMerkleProof, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
-import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.js';
 import * as hasher from '@lightprotocol/hasher.rs';
-import { MerkleTree } from './utils/merkle_tree.js';
-import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
+import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import BN from 'bn.js';
+import { getUtxos } from './getUtxos.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
-import { getUtxos, isUtxoSpent } from './getUtxos.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS } from './utils/constants.js';
+import { Utxo } from './models/utxo.js';
 import { useExistingALT } from './utils/address_lookup_table.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL } from './utils/constants.js';
+import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { logger } from './utils/logger.js';
+import { MerkleTree } from './utils/merkle_tree.js';
+import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
+import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
 
 
 // Function to relay pre-signed deposit transaction to indexer backend
@@ -97,12 +97,6 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
     // Create the merkle tree with the pre-initialized poseidon hash
     const tree = new MerkleTree(MERKLE_TREE_DEPTH, lightWasm);
 
-    // Initialize root and nextIndex variables
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
-
-    logger.debug(`Using tree root: ${root}`);
-    logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
-
     // Generate a deterministic private key derived from the wallet keypair
     // const utxoPrivateKey = encryptionService.deriveUtxoPrivateKey();
     const utxoPrivateKey = encryptionService.getUtxoPrivateKeyV2();
@@ -123,8 +117,12 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
     let inputs: Utxo[];
     let inputMerklePathIndices: number[];
     let inputMerklePathElements: string[][];
-
+    let root: string;
+    let nextIndex: number;
     if (existingUnspentUtxos.length === 0) {
+        const treeState = await queryRemoteTreeState();
+        root = treeState.root;
+        nextIndex = treeState.nextIndex;
         // Scenario 1: Fresh deposit with dummy inputs - add new funds to the system
         extAmount = amount_in_lamports;
         outputAmount = new BN(amount_in_lamports).sub(new BN(fee_amount_in_lamports)).toString();
@@ -188,16 +186,18 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
 
         // Fetch Merkle proofs for real UTXOs
         const firstUtxoCommitment = await firstUtxo.getCommitment();
-        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment);
-
-        let secondUtxoMerkleProof;
+        let commitmentsToFetch = [firstUtxoCommitment];
         if (secondUtxo.amount.gt(new BN(0))) {
             // Second UTXO is real, fetch its proof
             const secondUtxoCommitment = await secondUtxo.getCommitment();
-            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment);
+            commitmentsToFetch.push(secondUtxoCommitment);
             logger.debug('\nSecond UTXO to be consolidated:');
             await secondUtxo.log();
         }
+        let data = await fetchMerkleProof(commitmentsToFetch)
+        root = data.root
+        nextIndex = data.nextIndex
+        let [firstUtxoMerkleProof, secondUtxoMerkleProof] = data.proofs
 
         // Use the real pathIndices from API for real inputs, mock index for dummy input
         inputMerklePathIndices = [
@@ -228,13 +228,13 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
             lightWasm,
             amount: outputAmount,
             keypair: utxoKeypair,
-            index: currentNextIndex // This UTXO will be inserted at currentNextIndex
+            index: nextIndex // This UTXO will be inserted at currentNextIndex
         }), // Output with value (either deposit amount minus fee, or input amount minus fee)
         new Utxo({
             lightWasm,
             amount: '0',
             keypair: utxoKeypair,
-            index: currentNextIndex + 1 // This UTXO will be inserted at currentNextIndex + 1
+            index: nextIndex + 1 // This UTXO will be inserted at currentNextIndex + 1
         }) // Empty UTXO
     ];
 

@@ -5,14 +5,14 @@
  * Based on: https://github.com/tornadocash/tornado-nova
  */
 
-import BN from 'bn.js';
-import { Utxo } from '../models/utxo.js';
-import * as borsh from 'borsh';
 import { sha256 } from '@ethersproject/sha2';
 import { PublicKey } from '@solana/web3.js';
-import { RELAYER_API_URL, PROGRAM_ID } from './constants.js';
-import { logger } from './logger.js';
+import BN from 'bn.js';
+import * as borsh from 'borsh';
 import { getConfig } from '../config.js';
+import { Utxo } from '../models/utxo.js';
+import { PROGRAM_ID, RELAYER_API_URL } from './constants.js';
+import { logger } from './logger.js';
 
 /**
  * Calculate deposit fee based on deposit amount and fee rate
@@ -113,24 +113,29 @@ export function getExtDataHash(extData: {
   return Buffer.from(hashHex.slice(2), 'hex');
 }
 
+type Proof = { pathElements: string[], pathIndices: number[] }
 
 // Function to fetch Merkle proof from API for a given commitment
-export async function fetchMerkleProof(commitment: string, tokenName?: string): Promise<{ pathElements: string[], pathIndices: number[] }> {
+export async function fetchMerkleProof(commitments: string[], tokenName?: string): Promise<{
+  proofs: Proof[],
+  root: string,
+  nextIndex: number
+}> {
   try {
-    logger.debug(`Fetching Merkle proof for commitment: ${commitment}`);
-    let url = `${RELAYER_API_URL}/merkle/proof/${commitment}`
+    logger.debug(`Fetching Merkle proof for commitment: ${commitments.join(', ')} with token: ${tokenName || 'N/A'}`);
+    let url = `${RELAYER_API_URL}/merkle/proofv2/?commitments=${commitments.join(',')}`
     if (tokenName) {
-      url += '?token=' + tokenName
+      url += '&token=' + tokenName
     }
+    logger.debug(`Fetching Merkle proof from URL: ${url}`);
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch Merkle proof: ${url}`);
     }
-    const data = await response.json() as { pathElements: string[], pathIndices: number[] };
-    logger.debug(`✓ Fetched Merkle proof with ${data.pathElements.length} elements`);
+    const data = await response.json();
     return data;
   } catch (error) {
-    console.error(`Failed to fetch Merkle proof for commitment ${commitment}:`, error);
+    console.error(`Failed to fetch Merkle proof for commitments ${commitments.join(', ')}:`, error);
     throw error;
   }
 }

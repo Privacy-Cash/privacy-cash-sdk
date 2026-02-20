@@ -1,18 +1,18 @@
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from '@solana/web3.js';
+import * as hasher from '@lightprotocol/hasher.rs';
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Buffer } from 'buffer';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
-import * as hasher from '@lightprotocol/hasher.rs';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, RELAYER_API_URL } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
-import { fetchMerkleProof, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs } from './utils/utils.js';
+import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts } from './utils/utils.js';
 
+import { getConfig } from './config.js';
 import { getUtxos } from './getUtxos.js';
 import { logger } from './utils/logger.js';
-import { getConfig } from './config.js';
 // Indexer API endpoint
 
 
@@ -64,11 +64,6 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     logger.debug('Encryption key generated from user keypair');
 
     const { treeAccount, treeTokenAccount, globalConfigAccount } = getProgramAccounts()
-
-    // Get current tree state
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState();
-    logger.debug(`Using tree root: ${root}`);
-    logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
 
     // Generate a deterministic private key derived from the wallet keypair
     const utxoPrivateKey = encryptionService.deriveUtxoPrivateKey();
@@ -124,23 +119,26 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
     logger.debug(`Withdrawing ${amount_in_lamports} lamports with ${fee_in_lamports} fee, ${changeAmount.toString()} as change`);
 
     // Get Merkle proofs for both input UTXOs
-    const inputMerkleProofs = await Promise.all(
-        inputs.map(async (utxo, index) => {
-            // For dummy UTXO (amount is 0), use a zero-filled proof
-            if (utxo.amount.eq(new BN(0))) {
-                return {
-                    pathElements: [...new Array(MERKLE_TREE_DEPTH).fill("0")],
-                    pathIndices: Array(MERKLE_TREE_DEPTH).fill(0)
-                };
-            }
-            // For real UTXOs, fetch the proof from API
-            const commitment = await utxo.getCommitment();
-            return fetchMerkleProof(commitment);
-        })
-    );
+    let commitmentsToFetch = inputs.map(utxo => utxo.getCommitment());
+    console.log('commitmentsToFetch', commitmentsToFetch)
+    const { root, nextIndex, proofs } = await fetchMerkleProof(commitmentsToFetch);
+    // const inputMerkleProofs = await Promise.all(
+    //     inputs.map(async (utxo, index) => {
+    //         // For dummy UTXO (amount is 0), use a zero-filled proof
+    //         if (utxo.amount.eq(new BN(0))) {
+    //             return {
+    //                 pathElements: [...new Array(MERKLE_TREE_DEPTH).fill("0")],
+    //                 pathIndices: Array(MERKLE_TREE_DEPTH).fill(0)
+    //             };
+    //         }
+    //         // For real UTXOs, fetch the proof from API
+    //         const commitment = await utxo.getCommitment();
+    //         return fetchMerkleProof(commitment);
+    //     })
+    // );
 
     // Extract path elements and indices
-    const inputMerklePathElements = inputMerkleProofs.map(proof => proof.pathElements);
+    const inputMerklePathElements = proofs.map(proof => proof.pathElements);
     const inputMerklePathIndices = inputs.map(utxo => utxo.index || 0);
 
     // Create outputs: first output is change, second is dummy (required by protocol)
@@ -149,13 +147,13 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
             lightWasm,
             amount: changeAmount.toString(),
             keypair: utxoKeypairV2,
-            index: currentNextIndex
+            index: nextIndex
         }), // Change output
         new Utxo({
             lightWasm,
             amount: '0',
             keypair: utxoKeypairV2,
-            index: currentNextIndex + 1
+            index: nextIndex + 1
         }) // Empty UTXO
     ];
 

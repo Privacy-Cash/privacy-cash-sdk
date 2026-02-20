@@ -1,17 +1,17 @@
-import { Connection, Keypair, PublicKey, TransactionInstruction, SystemProgram, ComputeBudgetProgram, VersionedTransaction, TransactionMessage, AddressLookupTableProgram } from '@solana/web3.js';
-import BN from 'bn.js';
-import { Utxo } from './models/utxo.js';
-import { fetchMerkleProof, findNullifierPDAs, getProgramAccounts, queryRemoteTreeState, findCrossCheckNullifierPDAs, getExtDataHash, getMintAddressField } from './utils/utils.js';
-import { prove, parseProofToBytesArray, parseToBytesArray } from './utils/prover.js';
 import * as hasher from '@lightprotocol/hasher.rs';
-import { MerkleTree } from './utils/merkle_tree.js';
-import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAccount, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { ComputeBudgetProgram, Connection, PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import BN from 'bn.js';
+import { getUtxosSPL } from './getUtxosSPL.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
-import { getUtxosSPL, isUtxoSpent } from './getUtxosSPL.js';
-import { FIELD_SIZE, FEE_RECIPIENT, MERKLE_TREE_DEPTH, RELAYER_API_URL, PROGRAM_ID, ALT_ADDRESS, tokens, SplList, Token } from './utils/constants.js';
-import { getProtocolAddressesWithMint, useExistingALT } from './utils/address_lookup_table.js';
+import { Utxo } from './models/utxo.js';
+import { useExistingALT } from './utils/address_lookup_table.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL, Token, tokens } from './utils/constants.js';
+import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { logger } from './utils/logger.js';
-import { getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getMint, getAccount } from '@solana/spl-token';
+import { MerkleTree } from './utils/merkle_tree.js';
+import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
+import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getMintAddressField, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
 
 
 // Function to relay pre-signed deposit transaction to indexer backend
@@ -162,12 +162,6 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     // Create the merkle tree with the pre-initialized poseidon hash
     const tree = new MerkleTree(MERKLE_TREE_DEPTH, lightWasm);
 
-    // Initialize root and nextIndex variables
-    const { root, nextIndex: currentNextIndex } = await queryRemoteTreeState(token.name);
-
-    logger.debug(`Using tree root: ${root}`);
-    logger.debug(`New UTXOs will be inserted at indices: ${currentNextIndex} and ${currentNextIndex + 1}`);
-
     // Generate a deterministic private key derived from the wallet keypair
     // const utxoPrivateKey = encryptionService.deriveUtxoPrivateKey();
     const utxoPrivateKey = encryptionService.getUtxoPrivateKeyV2();
@@ -188,8 +182,12 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     let inputs: Utxo[];
     let inputMerklePathIndices: number[];
     let inputMerklePathElements: string[][];
-
+    let root: string;
+    let nextIndex: number;
     if (mintUtxos.length === 0) {
+        const treeState = await queryRemoteTreeState(token.name);
+        root = treeState.root
+        nextIndex = treeState.nextIndex
         // Scenario 1: Fresh deposit with dummy inputs - add new funds to the system
         extAmount = base_units;
         outputAmount = new BN(base_units).sub(new BN(fee_base_units)).toString();
@@ -241,6 +239,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         logger.debug('\nFirst UTXO to be consolidated:');
 
         // Use first existing UTXO as first input, and either second UTXO or dummy UTXO as second input
+
         const secondUtxo = mintUtxos.length > 1 ? mintUtxos[1] : new Utxo({
             lightWasm,
             keypair: utxoKeypair,
@@ -255,16 +254,21 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
         // Fetch Merkle proofs for real UTXOs
         const firstUtxoCommitment = await firstUtxo.getCommitment();
-        const firstUtxoMerkleProof = await fetchMerkleProof(firstUtxoCommitment, token.name);
 
-        let secondUtxoMerkleProof;
+        let commitmentsToFetch = [firstUtxoCommitment];
         if (secondUtxo.amount.gt(new BN(0))) {
             // Second UTXO is real, fetch its proof
             const secondUtxoCommitment = await secondUtxo.getCommitment();
-            secondUtxoMerkleProof = await fetchMerkleProof(secondUtxoCommitment, token.name);
+            commitmentsToFetch.push(secondUtxoCommitment);
             logger.debug('\nSecond UTXO to be consolidated:');
             await secondUtxo.log();
         }
+
+        let data = await fetchMerkleProof(commitmentsToFetch, token.name)
+        root = data.root
+        nextIndex = data.nextIndex
+        let [firstUtxoMerkleProof, secondUtxoMerkleProof] = data.proofs
+
 
         // Use the real pathIndices from API for real inputs, mock index for dummy input
         inputMerklePathIndices = [
@@ -295,14 +299,14 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             lightWasm,
             amount: outputAmount,
             keypair: utxoKeypair,
-            index: currentNextIndex, // This UTXO will be inserted at currentNextIndex
+            index: nextIndex, // This UTXO will be inserted at currentNextIndex
             mintAddress: token.pubkey.toString()
         }), // Output with value (either deposit amount minus fee, or input amount minus fee)
         new Utxo({
             lightWasm,
             amount: '0',
             keypair: utxoKeypair,
-            index: currentNextIndex + 1, // This UTXO will be inserted at currentNextIndex
+            index: nextIndex + 1, // This UTXO will be inserted at currentNextIndex
             mintAddress: token.pubkey.toString()
         }) // Empty UTXO
     ];
