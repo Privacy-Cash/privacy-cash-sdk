@@ -35,14 +35,15 @@ async function relayDepositToIndexer(signedTransaction: string, publicKey: Publi
             body: JSON.stringify(params)
         });
 
+        let data = await response.json()
         if (!response.ok) {
-            logger.error('res text:', await response.text())
-            throw new Error('response not ok')
-            // const errorData = await response.json() as { error?: string };
-            // throw new Error(`Deposit relay failed: ${response.status} ${response.statusText} - ${errorData.error || 'Unknown error'}`);
+            throw new Error(data.error || 'Request failed');
+        }
+        if (!data.success) {
+            throw new Error(data.error);
         }
 
-        const result = await response.json() as { signature: string, success: boolean };
+        const result = data as { signature: string, success: boolean };
         logger.debug('Pre-signed deposit transaction relayed successfully!');
         logger.debug('Response:', result);
 
