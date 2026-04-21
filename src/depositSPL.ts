@@ -104,7 +104,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     // let mintInfo = await getMint(connection, token.pubkey)
     // let units_per_token = 10 ** mintInfo.decimals
 
-    let recipient = new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM')
+    let recipient = new PublicKey(FEE_RECIPIENT.toString()) // Using fee recipient as dummy recipient for deposit
     let recipient_ata = getAssociatedTokenAddressSync(
         token.pubkey,
         recipient,
