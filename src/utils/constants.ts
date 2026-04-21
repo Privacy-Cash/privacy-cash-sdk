@@ -5,7 +5,7 @@ export const FIELD_SIZE = new BN('2188824287183927522224640574525727508854836440
 
 export const PROGRAM_ID = process.env.NEXT_PUBLIC_PROGRAM_ID ? new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID) : new PublicKey('9fhQBbumKEFuXtMBDw8AaQyAjCorLGJQiS3skWZdQyQD');
 
-export const FEE_RECIPIENT = new PublicKey('AWexibGxNFKTa1b5R5MN4PJr9HWnWRwf8EW9g8cLx3dM')
+export const FEE_RECIPIENT = new PublicKey('97rSMQUukMDjA7PYErccyx7ZxbHvSDaeXp2ig5BwSrTf')
 
 export const FETCH_UTXOS_GROUP_SIZE = 20_000
 
