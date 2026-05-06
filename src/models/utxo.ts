@@ -84,18 +84,13 @@ export class Utxo {
         // Prepare the UTXO data object
         const utxoData: any = {
             amount: this.amount.toString(),
-            blinding: this.blinding.toString(),
             index: this.index,
             mintAddress: this.mintAddress,
-            keypair: {
-                pubkey: this.keypair.pubkey.toString()
-            }
         };
 
         // Add derived values
         try {
             utxoData.commitment = await this.getCommitment();
-            utxoData.nullifier = await this.getNullifier();
         } catch (error: any) {
             utxoData.error = error.message;
         }
