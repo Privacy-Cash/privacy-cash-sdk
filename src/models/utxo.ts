@@ -91,7 +91,6 @@ export class Utxo {
         // Add derived values
         try {
             utxoData.commitment = await this.getCommitment();
-            utxoData.nullifier = await this.getNullifier();
         } catch (error: any) {
             utxoData.error = error.message;
         }
