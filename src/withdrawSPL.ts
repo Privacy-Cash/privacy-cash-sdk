@@ -80,6 +80,9 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     let units_per_token = 10 ** mintInfo.decimals
 
     let withdraw_fee_rate = await getConfig('withdraw_fee_rate')
+    if (token.name === 'store') {
+        withdraw_fee_rate = 0
+    }
     let withdraw_rent_fees = await getConfig('rent_fees')
     let token_rent_fee = withdraw_rent_fees[token.name]
     if (!token_rent_fee) {
