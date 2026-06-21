@@ -6,7 +6,7 @@ import { getUtxosSPL } from './getUtxosSPL.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { Utxo } from './models/utxo.js';
 import { useExistingALT } from './utils/address_lookup_table.js';
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL, Token, tokens } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, getRelayerTokenName, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL, Token, tokens } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { logger } from './utils/logger.js';
 import { MerkleTree } from './utils/merkle_tree.js';
@@ -88,6 +88,10 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     if (!token) {
         throw new Error('token not found: ' + mintAddress.toString())
     }
+    if (token.name === 'legacyStore') {
+        throw new Error('Legacy stORE deposit has been disabled. Please use the latest stORE.')
+    }
+    const relayerTokenName = getRelayerTokenName(token.name)
 
     if (amount) {
         base_units = amount * token.units_per_token
@@ -185,7 +189,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
     let root: string;
     let nextIndex: number;
     if (mintUtxos.length === 0) {
-        const treeState = await queryRemoteTreeState(token.name);
+        const treeState = await queryRemoteTreeState(relayerTokenName);
         root = treeState.root
         nextIndex = treeState.nextIndex
         // Scenario 1: Fresh deposit with dummy inputs - add new funds to the system
@@ -264,7 +268,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
             await secondUtxo.log();
         }
 
-        let data = await fetchMerkleProof(commitmentsToFetch, token.name)
+        let data = await fetchMerkleProof(commitmentsToFetch, relayerTokenName)
         root = data.root
         nextIndex = data.nextIndex
         let [firstUtxoMerkleProof, secondUtxoMerkleProof] = data.proofs
@@ -542,7 +546,7 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         logger.debug('Fetching updated onchain state...');
-        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + token.name
+        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + relayerTokenName
         let res = await fetch(url)
         let resJson = await res.json()
         if (resJson.exists) {

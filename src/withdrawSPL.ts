@@ -6,7 +6,7 @@ import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, PROGRAM_ID, RELAYER_API_URL, tokens } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, getRelayerTokenName, PROGRAM_ID, RELAYER_API_URL, tokens } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getMintAddressField, getProgramAccounts } from './utils/utils.js';
 
@@ -66,6 +66,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     if (!token) {
         throw new Error('token not found: ' + mintAddress.toString())
     }
+    const relayerTokenName = getRelayerTokenName(token.name)
 
     if (amount) {
         base_units = amount * token.units_per_token
@@ -80,7 +81,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     let units_per_token = 10 ** mintInfo.decimals
 
     let withdraw_fee_rate = await getConfig('withdraw_fee_rate')
-    if (token.name === 'store') {
+    if (token.name === 'legacyStore') {
         withdraw_fee_rate = 0
     }
     let withdraw_rent_fees = await getConfig('rent_fees')
@@ -179,7 +180,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
     logger.debug(`Withdrawing ${base_units} lamports with ${fee_base_units} fee, ${changeAmount.toString()} as change`);
 
     let commitmentsToFetch = inputs.map(utxo => utxo.getCommitment());
-    const { root, nextIndex, proofs } = await fetchMerkleProof(commitmentsToFetch, token.name);
+    const { root, nextIndex, proofs } = await fetchMerkleProof(commitmentsToFetch, relayerTokenName);
 
     // Extract path elements and indices
     const inputMerklePathElements = proofs.map(proof => proof.pathElements);
@@ -368,7 +369,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         logger.debug(`retryTimes: ${retryTimes}`)
         await new Promise(resolve => setTimeout(resolve, itv * 1000));
         logger.info('Fetching updated onchain state...');
-        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + token.name)
+        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + relayerTokenName)
         let resJson = await res.json()
         logger.debug('resJson:', resJson)
         if (resJson.exists) {

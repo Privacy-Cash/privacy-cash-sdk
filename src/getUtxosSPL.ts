@@ -6,7 +6,7 @@ import { EncryptionService } from './utils/encryption.js';
 import { WasmFactory } from '@lightprotocol/hasher.rs';
 //@ts-ignore
 import * as ffjavascript from 'ffjavascript';
-import { FETCH_UTXOS_GROUP_SIZE, RELAYER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID, SplList, tokens } from './utils/constants.js';
+import { FETCH_UTXOS_GROUP_SIZE, getRelayerTokenName, RELAYER_API_URL, LSK_ENCRYPTED_OUTPUTS, LSK_FETCH_OFFSET, PROGRAM_ID, tokens } from './utils/constants.js';
 import { logger } from './utils/logger.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 
@@ -77,6 +77,7 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
     if (!token) {
         throw new Error('token not found: ' + mintAddress.toString())
     }
+    const relayerTokenName = getRelayerTokenName(token.name)
 
     logger.debug('token name: ' + token.name + ', token address' + token.pubkey.toString())
 
@@ -107,8 +108,8 @@ export async function getUtxosSPL({ publicKey, connection, encryptionService, st
             }
             logger.debug(' ####fetch_utxo_offset', fetch_utxo_offset)
             let fetch_utxo_end = fetch_utxo_offset + FETCH_UTXOS_GROUP_SIZE
-            let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=${token.name}&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
-            let fetched = await fetchUserUtxos({ url: fetch_utxo_url, encryptionService, storage, publicKey_ata, tokenName: token.name })
+            let fetch_utxo_url = `${RELAYER_API_URL}/utxos/range?token=${relayerTokenName}&start=${fetch_utxo_offset}&end=${fetch_utxo_end}`
+            let fetched = await fetchUserUtxos({ url: fetch_utxo_url, encryptionService, storage, publicKey_ata, tokenName: relayerTokenName })
             let am = 0
 
             const nonZeroUtxos: Utxo[] = [];

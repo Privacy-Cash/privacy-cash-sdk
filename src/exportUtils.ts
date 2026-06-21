@@ -9,4 +9,4 @@ export { depositSPL } from './depositSPL.js'
 export { withdrawSPL } from './withdrawSPL.js'
 export { getBalanceFromUtxosSPL, getUtxosSPL } from './getUtxosSPL.js'
 
-export { type TokenList, type SplList, tokens } from './utils/constants.js'
+export { getRelayerTokenName, LEGACY_STORE_MINT, normalizeRelayerTokenMap, STORE_MINT, type TokenList, type SplList, tokens } from './utils/constants.js'

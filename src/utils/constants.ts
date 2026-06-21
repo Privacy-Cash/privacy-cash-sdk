@@ -26,10 +26,16 @@ export const LSK_FETCH_OFFSET = 'fetch_offset'
 export const LSK_ENCRYPTED_OUTPUTS = 'encrypted_outputs'
 
 export const USDC_MINT = process.env.NEXT_PUBLIC_USDC_MINT ? new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT) : new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
+export const STORE_MINT = process.env.NEXT_PUBLIC_NEWSTORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_NEWSTORE_MINT) : new PublicKey('storenSbvkfzircixnaosc5CbzNZVrHJ6S3EKrS1yqR')
+export const LEGACY_STORE_MINT = process.env.NEXT_PUBLIC_LEGACY_STORE_MINT
+    ? new PublicKey(process.env.NEXT_PUBLIC_LEGACY_STORE_MINT)
+    : process.env.NEXT_PUBLIC_STORE_MINT
+        ? new PublicKey(process.env.NEXT_PUBLIC_STORE_MINT)
+        : new PublicKey('sTorERYB6xAZ1SSbwpK3zoK2EEwbBrc7TZAzg1uCGiH')
 
-const tokenList = ['sol', 'usdc', 'usdt', 'zec', 'ore', 'store', 'jlusdc', 'jlwsol'] as const;
+const tokenList = ['sol', 'usdc', 'usdt', 'zec', 'ore', 'store', 'legacyStore', 'jlusdc', 'jlwsol'] as const;
 export type TokenList = typeof tokenList[number];
-const splList = ['usdc', 'usdt', 'zec', 'ore', 'store', 'jlusdc', 'jlwsol'] as const;
+const splList = ['usdc', 'usdt', 'zec', 'ore', 'store', 'legacyStore', 'jlusdc', 'jlwsol'] as const;
 export type SplList = typeof splList[number];
 export type Token = {
     name: TokenList
@@ -70,8 +76,14 @@ export const tokens: Token[] = [
     },
     {
         name: 'store',
-        pubkey: process.env.NEXT_PUBLIC_STORE_MINT ? new PublicKey(process.env.NEXT_PUBLIC_STORE_MINT) : new PublicKey('sTorERYB6xAZ1SSbwpK3zoK2EEwbBrc7TZAzg1uCGiH'),
+        pubkey: STORE_MINT,
         prefix: 'store_',
+        units_per_token: 1e11
+    },
+    {
+        name: 'legacyStore',
+        pubkey: LEGACY_STORE_MINT,
+        prefix: 'legacyStore_',
         units_per_token: 1e11
     },
     {
@@ -87,3 +99,44 @@ export const tokens: Token[] = [
         units_per_token: 1e9
     }
 ]
+
+export function getRelayerTokenName(tokenName: string) {
+    if (tokenName === 'store') {
+        return 'newstore'
+    }
+    if (tokenName === 'legacyStore') {
+        return 'store'
+    }
+    return tokenName
+}
+
+export function resolveTokenName(tokenName: string): TokenList | undefined {
+    const normalized = tokenName.trim().toLowerCase()
+    if (normalized === 'newstore') {
+        return 'store'
+    }
+    if (normalized === 'legacystore') {
+        return 'legacyStore'
+    }
+    return tokens.find(token => token.name.toLowerCase() === normalized)?.name
+}
+
+export function resolveToken(tokenName: string): Token | undefined {
+    const resolvedName = resolveTokenName(tokenName)
+    return resolvedName ? tokens.find(token => token.name === resolvedName) : undefined
+}
+
+export function normalizeRelayerTokenMap(values?: Record<string, number>): Record<string, number> | undefined {
+    if (!values) {
+        return values
+    }
+    const normalized = { ...values }
+    if (values.newstore !== undefined) {
+        normalized.store = values.newstore
+    }
+    if (values.store !== undefined) {
+        normalized.legacyStore = values.store
+    }
+    delete normalized.newstore
+    return normalized
+}
