@@ -1,6 +1,6 @@
 {
   "name": "privacycash",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "",
   "main": "dist/index.js",
   "repository": "https://github.com/Privacy-Cash/privacy-cash-sdk",
@@ -12,8 +12,6 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "postinstall": "cp node_modules/@lightprotocol/hasher.rs/dist/hasher_wasm_simd_bg.wasm node_modules/@lightprotocol/hasher.rs/dist/browser-fat/es/ && cp node_modules/@lightprotocol/hasher.rs/dist/light_wasm_hasher_bg.wasm node_modules/@lightprotocol/hasher.rs/dist/browser-fat/es/",
-    "prepare": "npm run build",
     "test": "vitest run --exclude \"**/__tests__/e2e.test.ts\" --exclude \"**/__tests__/e2espl.test.ts\"",
     "teste2e": "vitest run e2e.test.ts",
     "teste2espl": "vitest run e2espl.test.ts"
