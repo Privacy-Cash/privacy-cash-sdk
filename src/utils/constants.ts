@@ -110,6 +110,22 @@ export function getRelayerTokenName(tokenName: string) {
     return tokenName
 }
 
+export function resolveTokenName(tokenName: string): TokenList | undefined {
+    const normalized = tokenName.trim().toLowerCase()
+    if (normalized === 'newstore') {
+        return 'store'
+    }
+    if (normalized === 'legacystore') {
+        return 'legacyStore'
+    }
+    return tokens.find(token => token.name.toLowerCase() === normalized)?.name
+}
+
+export function resolveToken(tokenName: string): Token | undefined {
+    const resolvedName = resolveTokenName(tokenName)
+    return resolvedName ? tokens.find(token => token.name === resolvedName) : undefined
+}
+
 export function normalizeRelayerTokenMap(values?: Record<string, number>): Record<string, number> | undefined {
     if (!values) {
         return values

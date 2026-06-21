@@ -5,6 +5,8 @@ import {
     getRelayerTokenName,
     LEGACY_STORE_MINT,
     normalizeRelayerTokenMap,
+    resolveToken,
+    resolveTokenName,
     STORE_MINT,
     tokens,
 } from '../src/utils/constants';
@@ -25,6 +27,16 @@ describe('stORE token aliases', () => {
         expect(getRelayerTokenName('store')).toBe('newstore');
         expect(getRelayerTokenName('legacyStore')).toBe('store');
         expect(getRelayerTokenName('usdc')).toBe('usdc');
+    });
+
+    it('resolves CLI token aliases without exposing newstore', () => {
+        expect(resolveTokenName('store')).toBe('store');
+        expect(resolveTokenName('newstore')).toBe('store');
+        expect(resolveTokenName('legacyStore')).toBe('legacyStore');
+        expect(resolveTokenName('legacystore')).toBe('legacyStore');
+
+        expect(resolveToken('newstore')?.pubkey.toString()).toBe(STORE_MINT.toString());
+        expect(resolveToken('legacyStore')?.pubkey.toString()).toBe(LEGACY_STORE_MINT.toString());
     });
 
     it('normalizes relayer config maps without exposing newstore', () => {
