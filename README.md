@@ -2,7 +2,9 @@
 This is the SDK for Privacy Cash. It has been audited by Zigtur (https://x.com/zigtur).
 
 ### Disclaimer
-This SDK powers Privacy Cash's frontend, assuming the single wallet use case. If you use it or published npm library from this repo, please fully test and beware of the inherent software risks or potential bugs.
+This SDK powers Privacy Cash's frontend, assuming the single wallet use case. It is NOT supposed to support hardware wallet.
+
+If you use it or published npm library from this repo, please fully test and beware of the inherent software risks or potential bugs. Our team is not responsible for any losses.
 
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
