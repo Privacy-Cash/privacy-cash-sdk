@@ -33,6 +33,9 @@ Next.js project needs to update the postinstall build scripts:
 
 Use node version 24 or above.
 
+### Warnings
+Privacy Cash SDK requires consistent signature generation, otherwise the deposited tokens might be lost forever since the encrypted UTXO can't be decrypted. For frontend, please make sure deriveEncryptionKeyFromSignature() generates the same result for the same params passed in, and for backend, please make sure deriveEncryptionKeyFromWallet() generates the same result. Most wallets returns the same result, but some non major wallets might generate different result.
+
 ### Tests
 1. To run unit tests:
 ```
