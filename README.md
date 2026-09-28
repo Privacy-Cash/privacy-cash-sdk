@@ -20,6 +20,8 @@ depositSPL(), withdrawSPL(), getPrivateBalanceSpl()
 For backend integration:  
 Check the example project under /example folder. The code should be fairly self-explanatory.  
 
+For SDK referral attribution, pass the database-assigned partner id when withdrawing, for example `privacyCash.withdraw({ lamports: 10000000, referralId: 'partner_id' })`. The same `referralId` option is available on `withdrawUSDC` and `withdrawSPL`. Invalid or inactive ids are rejected before the withdrawal is submitted. The old `referrer` wallet-address option does not enroll a withdrawal in this program. When a referral id is supplied, check `referralRecorded` in the result; a false value means the withdrawal succeeded but the referral entry needs reconciliation using `tx`.
+
 For frontend integration:  
 Check the example project above, but also refer to: https://gist.github.com/SocialfiPanda/c63786b5dd156e59847e9a4afca31a77
 

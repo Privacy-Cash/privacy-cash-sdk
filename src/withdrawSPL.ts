@@ -18,7 +18,7 @@ import { logger } from './utils/logger.js';
 
 
 // Function to submit withdraw request to indexer backend
-async function submitWithdrawToIndexer(params: any): Promise<string> {
+async function submitWithdrawToIndexer(params: any): Promise<{ signature: string, referralRecorded?: boolean }> {
     try {
         const response = await fetch(`${RELAYER_API_URL}/withdraw/spl`, {
             method: 'POST',
@@ -33,11 +33,11 @@ async function submitWithdrawToIndexer(params: any): Promise<string> {
             throw new Error(errorData.error)
         }
 
-        const result = await response.json() as { signature: string, success: boolean };
+        const result = await response.json() as { signature: string, success: boolean, referralRecorded?: boolean };
         logger.debug('Withdraw request submitted successfully!');
         logger.debug('Response:', result);
 
-        return result.signature;
+        return result;
     } catch (error) {
         logger.debug('Failed to submit withdraw request to indexer:', typeof error, error);
         throw error;
@@ -55,10 +55,10 @@ type WithdrawParams = {
     recipient: PublicKey,
     mintAddress: PublicKey | string,
     storage: Storage,
-    referrer?: string,
+    referralId?: string,
 }
 
-export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, amount, encryptionService, keyBasePath, mintAddress, referrer }: WithdrawParams) {
+export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, connection, base_units, amount, encryptionService, keyBasePath, mintAddress, referralId }: WithdrawParams) {
     if (typeof mintAddress == 'string') {
         mintAddress = new PublicKey(mintAddress)
     }
@@ -350,14 +350,14 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         recipientAta: recipient_ata.toString(),
         mintAddress: token.pubkey.toString(),
         feeRecipientTokenAccount: feeRecipientTokenAccount.toString(),
-        referralWalletAddress: referrer
+        referralId
     };
 
     logger.debug('Prepared withdraw parameters for indexer backend');
 
     // Submit to indexer backend instead of directly to Solana
     logger.info('submitting transaction to relayer...')
-    const signature = await submitWithdrawToIndexer(withdrawParams);
+    const { signature, referralRecorded } = await submitWithdrawToIndexer(withdrawParams);
     // Wait a moment for the transaction to be confirmed
     logger.info('waiting for transaction confirmation...')
     let retryTimes = 0
@@ -373,7 +373,7 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
         let resJson = await res.json()
         logger.debug('resJson:', resJson)
         if (resJson.exists) {
-            return { isPartial, tx: signature, recipient: recipient.toString(), base_units, fee_base_units }
+            return { isPartial, tx: signature, recipient: recipient.toString(), base_units, fee_base_units, referralRecorded }
         }
         if (retryTimes >= 10) {
             throw new Error('Refresh the page to see latest balance.')
