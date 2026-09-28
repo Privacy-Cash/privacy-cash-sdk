@@ -17,7 +17,7 @@ import { logger } from './utils/logger.js';
 
 
 // Function to submit withdraw request to indexer backend
-async function submitWithdrawToIndexer(params: any): Promise<string> {
+async function submitWithdrawToIndexer(params: any): Promise<{ signature: string, referralRecorded?: boolean }> {
     try {
 
         const response = await fetch(`${RELAYER_API_URL}/withdraw`, {
@@ -33,11 +33,11 @@ async function submitWithdrawToIndexer(params: any): Promise<string> {
             throw new Error(errorData.error)
         }
 
-        const result = await response.json() as { signature: string, success: boolean };
+        const result = await response.json() as { signature: string, success: boolean, referralRecorded?: boolean };
         logger.debug('Withdraw request submitted successfully!');
         logger.debug('Response:', result);
 
-        return result.signature;
+        return result;
     } catch (error) {
         logger.debug('Failed to submit withdraw request to indexer:', typeof error, error);
         throw error;
@@ -53,10 +53,10 @@ type WithdrawParams = {
     lightWasm: hasher.LightWasm,
     recipient: PublicKey,
     storage: Storage,
-    referrer?: string,
+    referralId?: string,
 }
 
-export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath, referrer }: WithdrawParams) {
+export async function withdraw({ recipient, lightWasm, storage, publicKey, connection, amount_in_lamports, encryptionService, keyBasePath, referralId }: WithdrawParams) {
     let fee_in_lamports = Math.floor(amount_in_lamports * (await getConfig('withdraw_fee_rate')) + LAMPORTS_PER_SOL * (await getConfig('withdraw_rent_fee')))
     amount_in_lamports = Math.floor(amount_in_lamports - fee_in_lamports)
     let isPartial = false
@@ -297,7 +297,7 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         encryptedOutput2: encryptedOutput2.toString('base64'),
         fee: fee_in_lamports,
         lookupTableAddress: ALT_ADDRESS.toString(),
-        referralWalletAddress: referrer
+        referralId
     };
 
 
@@ -305,7 +305,7 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
 
     // Submit to indexer backend instead of directly to Solana
     logger.info('submitting transaction to relayer...')
-    const signature = await submitWithdrawToIndexer(withdrawParams);
+    const { signature, referralRecorded } = await submitWithdrawToIndexer(withdrawParams);
     // Wait a moment for the transaction to be confirmed
     logger.info('waiting for transaction confirmation...')
     let retryTimes = 0
@@ -321,7 +321,7 @@ export async function withdraw({ recipient, lightWasm, storage, publicKey, conne
         let resJson = await res.json()
         logger.debug('resJson:', resJson)
         if (resJson.exists) {
-            return { isPartial, tx: signature, recipient: recipient.toString(), amount_in_lamports, fee_in_lamports }
+            return { isPartial, tx: signature, recipient: recipient.toString(), amount_in_lamports, fee_in_lamports, referralRecorded }
         }
         if (retryTimes >= 10) {
             throw new Error('Refresh the page to see latest balance.')
