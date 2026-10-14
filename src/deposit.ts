@@ -5,55 +5,16 @@ import { getUtxos } from './getUtxos.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { Utxo } from './models/utxo.js';
 import { useExistingALT } from './utils/address_lookup_table.js';
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, MERKLE_TREE_DEPTH, PROGRAM_ID } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { logger } from './utils/logger.js';
 import { MerkleTree } from './utils/merkle_tree.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
+import { submitRelayedTransaction, waitForIndexedOutput } from './utils/relayTransaction.js';
 import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
 
 
 // Function to relay pre-signed deposit transaction to indexer backend
-async function relayDepositToIndexer(signedTransaction: string, publicKey: PublicKey, referrer?: string): Promise<string> {
-    try {
-        logger.debug('Relaying pre-signed deposit transaction to indexer backend...');
-
-        const params: any = {
-            signedTransaction,
-            senderAddress: publicKey.toString()
-        };
-
-        if (referrer) {
-            params.referralWalletAddress = referrer
-        }
-
-        const response = await fetch(`${RELAYER_API_URL}/deposit`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(params)
-        });
-
-        let data = await response.json()
-        if (!response.ok) {
-            throw new Error(data.error || 'Request failed');
-        }
-        if (!data.success) {
-            throw new Error(data.error);
-        }
-
-        const result = data as { signature: string, success: boolean };
-        logger.debug('Pre-signed deposit transaction relayed successfully!');
-        logger.debug('Response:', result);
-
-        return result.signature;
-    } catch (error) {
-        console.error('Failed to relay deposit transaction to indexer:', error);
-        throw error;
-    }
-}
-
 type DepositParams = {
     publicKey: PublicKey,
     connection: Connection,
@@ -434,32 +395,18 @@ export async function deposit({ lightWasm, storage, keyBasePath, publicKey, conn
 
     // Relay the pre-signed transaction to indexer backend
     logger.info('submitting transaction to relayer...')
-    const signature = await relayDepositToIndexer(serializedTransaction, signer, referrer);
+    const { signature } = await submitRelayedTransaction({
+        path: '/deposit', connection, signedTransaction: serializedTransaction,
+        body: { signedTransaction: serializedTransaction, senderAddress: signer.toString(), ...(referrer ? { referralWalletAddress: referrer } : {}) }
+    });
     logger.debug('Transaction signature:', signature);
     logger.debug(`Transaction link: https://explorer.solana.com/tx/${signature}`);
 
     logger.info('Waiting for transaction confirmation...')
 
-    let retryTimes = 0
-    let itv = 2
     const encryptedOutputStr = Buffer.from(encryptedOutput1).toString('hex')
-    let start = Date.now()
-    while (true) {
-        logger.info('Confirming transaction..')
-        logger.debug(`retryTimes: ${retryTimes}`)
-        await new Promise(resolve => setTimeout(resolve, itv * 1000));
-        logger.debug('Fetching updated onchain state...');
-        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr)
-        let resJson = await res.json()
-        if (resJson.exists) {
-            logger.debug(`Top up successfully in ${((Date.now() - start) / 1000).toFixed(2)} seconds!`);
-            return { tx: signature }
-        }
-        if (retryTimes >= 10) {
-            throw new Error('Refresh the page to see latest balance.')
-        }
-        retryTimes++
-    }
+    const indexed = await waitForIndexedOutput(connection, signature, encryptedOutputStr);
+    return { tx: signature, indexingPending: !indexed };
 
 }
 

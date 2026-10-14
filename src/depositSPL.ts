@@ -6,65 +6,14 @@ import { getUtxosSPL } from './getUtxosSPL.js';
 import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { Utxo } from './models/utxo.js';
 import { useExistingALT } from './utils/address_lookup_table.js';
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, getRelayerTokenName, MERKLE_TREE_DEPTH, PROGRAM_ID, RELAYER_API_URL, Token, tokens } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, getRelayerTokenName, MERKLE_TREE_DEPTH, PROGRAM_ID, Token, tokens } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { logger } from './utils/logger.js';
 import { MerkleTree } from './utils/merkle_tree.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
+import { submitRelayedTransaction, waitForIndexedOutput } from './utils/relayTransaction.js';
 import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getMintAddressField, getProgramAccounts, queryRemoteTreeState } from './utils/utils.js';
 
-
-// Function to relay pre-signed deposit transaction to indexer backend
-async function relayDepositToIndexer({ signedTransaction, publicKey, referrer, mintAddress }:
-    {
-        signedTransaction: string,
-        publicKey: PublicKey,
-        mintAddress: string,
-        referrer?: string
-    })
-    : Promise<string> {
-    try {
-        logger.debug('Relaying pre-signed deposit transaction to indexer backend...');
-
-        const params: any = {
-            signedTransaction,
-            senderAddress: publicKey.toString()
-        };
-
-        if (referrer) {
-            params.referralWalletAddress = referrer
-        }
-        params.mintAddress = mintAddress
-
-        const response = await fetch(`${RELAYER_API_URL}/deposit/spl`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(params)
-        });
-
-        if (!response.ok) {
-            logger.debug('res text:', await response.text())
-            throw new Error('response not ok')
-            // const errorData = await response.json() as { error?: string };
-            // throw new Error(`Deposit relay failed: ${response.status} ${response.statusText} - ${errorData.error || 'Unknown error'}`);
-        }
-        let result: { signature: string, success: boolean }
-        try {
-            result = await response.json()
-            logger.debug('Pre-signed deposit transaction relayed successfully!');
-            logger.debug('Response:', result);
-        } catch (e) {
-            console.log('response.text', await response.text())
-            throw new Error('failed to parse json')
-        }
-        return result.signature;
-    } catch (error: any) {
-        console.error('Failed to relay deposit transaction to indexer:', error.message);
-        throw error;
-    }
-}
 
 type DepositParams = {
     mintAddress: PublicKey | string,
@@ -526,38 +475,18 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     // Relay the pre-signed transaction to indexer backend
     logger.info('submitting transaction to relayer...')
-    const signature = await relayDepositToIndexer({
-        mintAddress: token.pubkey.toString(),
-        publicKey: signer,
-        signedTransaction: serializedTransaction,
-        referrer
+    const { signature } = await submitRelayedTransaction({
+        path: '/deposit/spl', connection, signedTransaction: serializedTransaction,
+        body: { signedTransaction: serializedTransaction, senderAddress: signer.toString(), mintAddress: token.pubkey.toString(), ...(referrer ? { referralWalletAddress: referrer } : {}) }
     });
     logger.debug('Transaction signature:', signature);
     logger.debug(`Transaction link: https://explorer.solana.com/tx/${signature}`);
 
     logger.info('Waiting for transaction confirmation...')
 
-    let retryTimes = 0
-    let itv = 2
     const encryptedOutputStr = Buffer.from(encryptedOutput1).toString('hex')
-    let start = Date.now()
-    while (true) {
-        logger.info('Confirming transaction..')
-        logger.debug(`retryTimes: ${retryTimes}`)
-        await new Promise(resolve => setTimeout(resolve, itv * 1000));
-        logger.debug('Fetching updated onchain state...');
-        let url = RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + relayerTokenName
-        let res = await fetch(url)
-        let resJson = await res.json()
-        if (resJson.exists) {
-            logger.debug(`Top up successfully in ${((Date.now() - start) / 1000).toFixed(2)} seconds!`);
-            return { tx: signature }
-        }
-        if (retryTimes >= 10) {
-            throw new Error('Refresh the page to see latest balance.')
-        }
-        retryTimes++
-    }
+    const indexed = await waitForIndexedOutput(connection, signature, encryptedOutputStr, relayerTokenName);
+    return { tx: signature, indexingPending: !indexed };
 
 }
 

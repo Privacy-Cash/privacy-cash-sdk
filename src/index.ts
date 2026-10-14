@@ -15,6 +15,8 @@ import { depositSPL } from './depositSPL.js';
 import { withdrawSPL } from './withdrawSPL.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 
+export { TransactionStatusUnknownError, TransactionExecutionError } from './utils/relayTransaction.js';
+
 let storage = new LocalStorage(path.join(process.cwd(), "cache"));
 
 export class PrivacyCash {
