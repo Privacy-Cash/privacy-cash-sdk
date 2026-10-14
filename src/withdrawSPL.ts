@@ -6,7 +6,7 @@ import { Keypair as UtxoKeypair } from './models/keypair.js';
 import { Utxo } from './models/utxo.js';
 import { parseProofToBytesArray, parseToBytesArray, prove } from './utils/prover.js';
 
-import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, getRelayerTokenName, PROGRAM_ID, RELAYER_API_URL, tokens } from './utils/constants.js';
+import { ALT_ADDRESS, FEE_RECIPIENT, FIELD_SIZE, getRelayerTokenName, PROGRAM_ID, tokens } from './utils/constants.js';
 import { EncryptionService, serializeProofAndExtData } from './utils/encryption.js';
 import { fetchMerkleProof, findCrossCheckNullifierPDAs, findNullifierPDAs, getExtDataHash, getMintAddressField, getProgramAccounts } from './utils/utils.js';
 
@@ -14,35 +14,9 @@ import { getAssociatedTokenAddressSync, getMint } from '@solana/spl-token';
 import { getConfig } from './config.js';
 import { getUtxosSPL } from './getUtxosSPL.js';
 import { logger } from './utils/logger.js';
+import { submitRelayedTransaction, waitForIndexedOutput } from './utils/relayTransaction.js';
 // Indexer API endpoint
 
-
-// Function to submit withdraw request to indexer backend
-async function submitWithdrawToIndexer(params: any): Promise<{ signature: string, referralRecorded?: boolean }> {
-    try {
-        const response = await fetch(`${RELAYER_API_URL}/withdraw/spl`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(params)
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json() as { error?: string };
-            throw new Error(errorData.error)
-        }
-
-        const result = await response.json() as { signature: string, success: boolean, referralRecorded?: boolean };
-        logger.debug('Withdraw request submitted successfully!');
-        logger.debug('Response:', result);
-
-        return result;
-    } catch (error) {
-        logger.debug('Failed to submit withdraw request to indexer:', typeof error, error);
-        throw error;
-    }
-}
 
 type WithdrawParams = {
     publicKey: PublicKey,
@@ -357,28 +331,11 @@ export async function withdrawSPL({ recipient, lightWasm, storage, publicKey, co
 
     // Submit to indexer backend instead of directly to Solana
     logger.info('submitting transaction to relayer...')
-    const { signature, referralRecorded } = await submitWithdrawToIndexer(withdrawParams);
+    const { signature, referralRecorded } = await submitRelayedTransaction({ path: '/withdraw/spl', body: withdrawParams, connection });
     // Wait a moment for the transaction to be confirmed
     logger.info('waiting for transaction confirmation...')
-    let retryTimes = 0
-    let itv = 2
     const encryptedOutputStr = Buffer.from(encryptedOutput1).toString('hex')
-    let start = Date.now()
-    while (true) {
-        logger.info('Confirming transaction..')
-        logger.debug(`retryTimes: ${retryTimes}`)
-        await new Promise(resolve => setTimeout(resolve, itv * 1000));
-        logger.info('Fetching updated onchain state...');
-        let res = await fetch(RELAYER_API_URL + '/utxos/check/' + encryptedOutputStr + '?token=' + relayerTokenName)
-        let resJson = await res.json()
-        logger.debug('resJson:', resJson)
-        if (resJson.exists) {
-            return { isPartial, tx: signature, recipient: recipient.toString(), base_units, fee_base_units, referralRecorded }
-        }
-        if (retryTimes >= 10) {
-            throw new Error('Refresh the page to see latest balance.')
-        }
-        retryTimes++
-    }
+    const indexed = await waitForIndexedOutput(connection, signature, encryptedOutputStr, relayerTokenName);
+    return { isPartial, tx: signature, recipient: recipient.toString(), base_units, fee_base_units, referralRecorded, indexingPending: !indexed };
 
 }
