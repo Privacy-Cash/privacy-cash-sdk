@@ -429,10 +429,10 @@ export async function depositSPL({ lightWasm, storage, keyBasePath, publicKey, c
 
     // Set compute budget for the transaction
     const modifyComputeUnits = ComputeBudgetProgram.setComputeUnitLimit({
-        units: 1_000_000
+        units: 400_000
     });
     const prioritizeCompute = ComputeBudgetProgram.setComputeUnitPrice({
-        microLamports: 200_000
+        microLamports: 400_000
     });
 
     // Create versioned transaction with Address Lookup Table
