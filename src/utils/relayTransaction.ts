@@ -96,6 +96,10 @@ export async function submitRelayedTransaction({ path, body, connection, signedT
 
     const signature = localSignature || (typeof data.signature === 'string' ? data.signature : undefined);
     const reason = new Error(data.error || `Relay request failed (${response.status})`);
+    // TODO: Temporary emergency workaround; replace text matching with structured risk error codes.
+    if (typeof data.error === 'string' && /risk/i.test(data.error)) {
+        throw reason;
+    }
     if (signature) {
         return { signature: await resolveAmbiguousResponse(connection, signature, reason), referralRecorded: data.referralRecorded };
     }
