@@ -25,6 +25,12 @@ For SDK referral attribution, pass the database-assigned partner id when withdra
 For frontend integration:  
 Check the example project above, but also refer to: https://gist.github.com/SocialfiPanda/c63786b5dd156e59847e9a4afca31a77
 
+Temporary emergency behavior: when a relayer response is not accepted as a successful
+transaction and its `error` string contains `risk` (case-insensitive), the SDK throws
+that error immediately instead of polling chain status for 30 seconds. This applies
+to SOL/SPL deposits and withdrawals. Other errors keep their existing handling.
+This text matching is temporary and should later be replaced with structured error codes.
+
 Common Issues:  
 Next.js project needs to update the postinstall build scripts:  
 ```

@@ -43,6 +43,21 @@ describe.each(['/deposit', '/deposit/spl'])('%s', path => {
         expect(rpc.getSignatureStatuses).toHaveBeenCalledWith([signature], { searchTransactionHistory: true });
     });
 
+    it.each([
+        [400, 'Your wallet address is risky. Service rejected.'],
+        [500, 'RISK screening rejected this wallet'],
+        [200, 'Risk detected']
+    ])('immediately rejects a risk error from HTTP %s without polling', async (status, message) => {
+        vi.useFakeTimers();
+        const rpc = connection(null);
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(status, { success: false, error: message })));
+
+        await expect(submitRelayedTransaction({ path, body: {}, connection: rpc, signedTransaction }))
+            .rejects.toThrow(message);
+        expect(rpc.getSignatureStatuses).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('reports an explicit on-chain failure', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(500, {})));
         await expect(submitRelayedTransaction({ path, body: {}, connection: connection({ confirmationStatus: 'confirmed', err: { InstructionError: [0, 'InvalidArgument'] } }), signedTransaction }))
@@ -57,6 +72,18 @@ describe.each(['/deposit', '/deposit/spl'])('%s', path => {
 });
 
 describe.each(['/withdraw', '/withdraw/spl'])('%s', path => {
+    it('immediately rejects a risk error even when the response includes a signature', async () => {
+        vi.useFakeTimers();
+        const rpc = connection(null);
+        const message = 'Your wallet address is risky. Service rejected.';
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(400, { success: false, error: message, signature })));
+
+        await expect(submitRelayedTransaction({ path, body: {}, connection: rpc }))
+            .rejects.toThrow(message);
+        expect(rpc.getSignatureStatuses).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('recovers from a relayer error that includes a confirmed signature', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(503, { code: 'TRANSACTION_STATUS_UNKNOWN', signature })));
         await expect(submitRelayedTransaction({ path, body: {}, connection: connection() }))
