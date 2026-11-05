@@ -96,8 +96,9 @@ export async function submitRelayedTransaction({ path, body, connection, signedT
 
     const signature = localSignature || (typeof data.signature === 'string' ? data.signature : undefined);
     const reason = new Error(data.error || `Relay request failed (${response.status})`);
-    // TODO: Temporary emergency workaround; replace text matching with structured risk error codes.
-    if (typeof data.error === 'string' && /risk/i.test(data.error)) {
+    // TODO: Replace rejection text matching with structured error codes.
+    if (typeof data.error === 'string'
+        && (/risk/i.test(data.error) || data.error.trim().toLowerCase() === 'service rejected')) {
         throw reason;
     }
     if (signature) {
