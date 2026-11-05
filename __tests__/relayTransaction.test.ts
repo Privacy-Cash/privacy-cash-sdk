@@ -44,10 +44,14 @@ describe.each(['/deposit', '/deposit/spl'])('%s', path => {
     });
 
     it.each([
+        [400, 'Service rejected'],
+        [500, 'Service rejected'],
+        [200, 'Service rejected'],
+        [400, '  SERVICE REJECTED  '],
         [400, 'Your wallet address is risky. Service rejected.'],
         [500, 'RISK screening rejected this wallet'],
         [200, 'Risk detected']
-    ])('immediately rejects a risk error from HTTP %s without polling', async (status, message) => {
+    ])('immediately rejects HTTP %s error "%s" without polling', async (status, message) => {
         vi.useFakeTimers();
         const rpc = connection(null);
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(status, { success: false, error: message })));
@@ -72,11 +76,17 @@ describe.each(['/deposit', '/deposit/spl'])('%s', path => {
 });
 
 describe.each(['/withdraw', '/withdraw/spl'])('%s', path => {
-    it('immediately rejects a risk error even when the response includes a signature', async () => {
+    it.each([
+        ['Your wallet address is risky. Service rejected.', signature],
+        ['Service rejected', signature],
+        ['Service rejected', undefined],
+        ['  SERVICE REJECTED  ', signature]
+    ])('immediately rejects "%s" with response signature %s without polling', async (message, responseSignature) => {
         vi.useFakeTimers();
         const rpc = connection(null);
-        const message = 'Your wallet address is risky. Service rejected.';
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(400, { success: false, error: message, signature })));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(400, {
+            success: false, error: message, signature: responseSignature
+        })));
 
         await expect(submitRelayedTransaction({ path, body: {}, connection: rpc }))
             .rejects.toThrow(message);
